@@ -49,6 +49,10 @@ const percentFormatter = new Intl.NumberFormat("en-IN", {
 export default function DashboardPage() {
   const [file, setFile] = useState<File | null>(null);
   const [source, setSource] = useState<"kite" | "groww">("kite");
+  const [reportDate, setReportDate] = useState<string>(() => {
+    const today = new Date();
+    return today.toISOString().split("T")[0];
+  });
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
@@ -115,6 +119,7 @@ export default function DashboardPage() {
     const formData = new FormData();
     formData.append("file", file);
     formData.append("source", source);
+    formData.append("reportDate", reportDate);
 
     try {
       const response = await fetch("/api/upload", {
@@ -283,6 +288,19 @@ export default function DashboardPage() {
                   <option value="kite">Kite</option>
                   <option value="groww">Groww</option>
                 </select>
+              </div>
+
+              <div className="grid gap-2 sm:max-w-48">
+                <Label htmlFor="report-date">Report date</Label>
+                <Input
+                  id="report-date"
+                  type="date"
+                  value={reportDate}
+                  onChange={(event) => {
+                    setReportDate(event.target.value);
+                  }}
+                  className="h-8"
+                />
               </div>
 
               <div>

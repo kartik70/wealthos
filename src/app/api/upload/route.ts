@@ -26,6 +26,7 @@ export async function POST(request: Request): Promise<Response> {
     const formData = await request.formData();
     const source = readSource(formData);
     const file = readCsvFile(formData);
+    const reportDate = readReportDate(formData);
     const csvString = await file.text();
     const parsedHoldings = parseKiteCSV(csvString);
 
@@ -38,8 +39,44 @@ export async function POST(request: Request): Promise<Response> {
 
     const holdings = calcAllocationPct(parsedHoldings);
     const totals = calcPortfolioTotals(holdings);
-    const supabase =await createSupabaseServerClient();
+    const supabase = await createSupabaseServerClient();
     const userId = "local-dev-user";
+
+    // Check if a snapshot with this or a later date already exists
+    const { data: latestSnapshot, error: latestError } = await supabase
+      .from("portfolio_snapshots")
+      .select("created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (latestError !== null) {
+      return Response.json(
+        { error: `Failed to check existing snapshots: ${latestError.message}` },
+        { status: 500 },
+      );
+    }
+
+    if (latestSnapshot !== null) {
+      const latestDate = new Date(latestSnapshot.created_at);
+      const uploadedDate = new Date(reportDate);
+
+      if (uploadedDate <= latestDate) {
+        const formatter = new Intl.DateTimeFormat("en-IN", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+        const existingDate = formatter.format(latestDate);
+        return Response.json(
+          {
+            error: `A snapshot from ${existingDate} already exists. Please upload a more recent report.`,
+          },
+          { status: 400 },
+        );
+      }
+    }
 
     const snapshotInsert: SnapshotInsert = {
       user_id: userId,
@@ -48,6 +85,7 @@ export async function POST(request: Request): Promise<Response> {
       total_gain: totals.totalGain,
       total_gain_pct: totals.totalGainPct,
       source,
+      created_at: new Date(reportDate).toISOString(),
       raw_data: null,
     };
     const { data: snapshot, error: snapshotError } = await supabase
@@ -132,4 +170,19 @@ function readCsvFile(formData: FormData): File {
   }
 
   return file;
+}
+
+function readReportDate(formData: FormData): string {
+  const reportDate = formData.get("reportDate");
+
+  if (typeof reportDate !== "string" || reportDate.trim() === "") {
+    throw new Error("reportDate is required");
+  }
+
+  // Validate it's a valid date string (YYYY-MM-DD)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reportDate)) {
+    throw new Error("reportDate must be in YYYY-MM-DD format");
+  }
+
+  return reportDate;
 }
