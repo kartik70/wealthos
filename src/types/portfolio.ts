@@ -22,6 +22,19 @@ export interface PortfolioSnapshot {
   source: "kite" | "groww" | "manual";
 }
 
+export interface PortfolioTotals {
+  totalValue: number;
+  totalCost: number;
+  totalGain: number;
+  totalGainPct: number;
+}
+
+export interface HoldingConcentration {
+  symbol: string;
+  allocationPct: number;
+  isHighConcentration: boolean;
+}
+
 export interface InsightResponse {
   summary: string;
   recommendations: Recommendation[];
