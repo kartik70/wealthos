@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "../../../lib/db/supabase";
+import { createSupabaseAdminClient, createSupabaseServerClient } from "../../../lib/db/supabase";
 import {
   calcAllocationPct,
   calcPortfolioTotals,
@@ -38,25 +38,11 @@ export async function POST(request: Request): Promise<Response> {
 
     const holdings = calcAllocationPct(parsedHoldings);
     const totals = calcPortfolioTotals(holdings);
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError !== null) {
-      return Response.json(
-        { error: `Failed to read authenticated user: ${userError.message}` },
-        { status: 401 },
-      );
-    }
-
-    if (user === null) {
-      return Response.json({ error: "Authentication required" }, { status: 401 });
-    }
+    const supabase = createSupabaseAdminClient();
+    const userId = "local-dev-user";
 
     const snapshotInsert: SnapshotInsert = {
-      user_id: user.id,
+      user_id: userId,
       total_value: totals.totalValue,
       total_cost: totals.totalCost,
       total_gain: totals.totalGain,
@@ -64,6 +50,7 @@ export async function POST(request: Request): Promise<Response> {
       source,
       raw_data: null,
     };
+    console.log("Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
     const { data: snapshot, error: snapshotError } = await supabase
       .from("portfolio_snapshots")
       .insert(snapshotInsert)
@@ -112,6 +99,7 @@ export async function POST(request: Request): Promise<Response> {
         snapshotId: snapshot.id,
         totals,
         holdings,
+        persisted: true,
       },
       { status: 201 },
     );

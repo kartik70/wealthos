@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -18,9 +19,11 @@ import { cn } from "@/lib/utils";
 import type { Holding, PortfolioTotals } from "@/types/portfolio";
 
 interface UploadResponse {
-  snapshotId: string;
+  snapshotId: string | null;
   totals: PortfolioTotals;
   holdings: Holding[];
+  persisted?: boolean;
+  warning?: string;
 }
 
 const rupeeFormatter = new Intl.NumberFormat("en-IN", {
@@ -38,8 +41,10 @@ export default function DashboardPage() {
   const [source, setSource] = useState<"kite" | "groww">("kite");
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  const totals = uploadResult?.totals;
   const hasHoldings = uploadResult !== null && uploadResult.holdings.length > 0;
   const gainTone = useMemo(() => {
     if (uploadResult === null) {
@@ -59,6 +64,7 @@ export default function DashboardPage() {
 
     setIsUploading(true);
     setError(null);
+    setWarning(null);
 
     const formData = new FormData();
     formData.append("file", file);
@@ -82,6 +88,7 @@ export default function DashboardPage() {
       }
 
       setUploadResult(payload);
+      setWarning(payload.warning ?? null);
     } catch (uploadError) {
       setError(
         uploadError instanceof Error ? uploadError.message : "Upload failed.",
@@ -92,50 +99,112 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="font-heading text-2xl font-semibold">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Upload a portfolio CSV to create the latest snapshot.
-        </p>
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1 border-b pb-4">
+        <h1 className="font-heading text-2xl font-semibold tracking-tight">
+          Dashboard
+        </h1>
+        <p className="text-sm text-muted-foreground">Portfolio snapshot</p>
       </div>
 
-      <form
-        onSubmit={handleSubmit}
-        className="grid gap-3 rounded-xl border bg-card p-4 md:grid-cols-[1fr_160px_auto] md:items-end"
-      >
-        <div className="grid gap-2">
-          <Label htmlFor="portfolio-csv">CSV file</Label>
-          <Input
-            id="portfolio-csv"
-            type="file"
-            accept=".csv,text/csv"
-            onChange={(event) => {
-              setFile(event.target.files?.[0] ?? null);
-            }}
-          />
-        </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        <StatCard
+          label="Total Value"
+          value={totals === undefined ? "--" : rupeeFormatter.format(totals.totalValue)}
+        />
+        <StatCard
+          label="Total Gain/Loss"
+          value={totals === undefined ? "--" : rupeeFormatter.format(totals.totalGain)}
+          valueClassName={totals === undefined ? undefined : gainTone}
+        />
+        <StatCard
+          label="Gain %"
+          value={
+            totals === undefined
+              ? "--"
+              : `${percentFormatter.format(totals.totalGainPct)}%`
+          }
+          valueClassName={totals === undefined ? undefined : gainTone}
+        />
+      </div>
 
-        <div className="grid gap-2">
-          <Label htmlFor="source">Source</Label>
-          <select
-            id="source"
-            value={source}
-            onChange={(event) => {
-              setSource(event.target.value === "groww" ? "groww" : "kite");
-            }}
-            className="h-8 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
-            <option value="kite">Kite</option>
-            <option value="groww">Groww</option>
-          </select>
-        </div>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Upload</CardTitle>
+            <CardDescription>Kite CSV snapshot import</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="grid gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="portfolio-csv">CSV file</Label>
+                <Input
+                  id="portfolio-csv"
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="file:mr-3 file:rounded-md file:bg-muted file:px-2"
+                  onChange={(event) => {
+                    setFile(event.target.files?.[0] ?? null);
+                  }}
+                />
+              </div>
 
-        <Button type="submit" disabled={isUploading}>
-          <Upload className="size-4" aria-hidden="true" />
-          {isUploading ? "Uploading" : "Upload"}
-        </Button>
-      </form>
+              <div className="grid gap-2 sm:max-w-48">
+                <Label htmlFor="source">Source</Label>
+                <select
+                  id="source"
+                  value={source}
+                  onChange={(event) => {
+                    setSource(event.target.value === "groww" ? "groww" : "kite");
+                  }}
+                  className="h-8 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <option value="kite">Kite</option>
+                  <option value="groww">Groww</option>
+                </select>
+              </div>
+
+              <div>
+                <Button type="submit" disabled={isUploading}>
+                  <Upload className="size-4" aria-hidden="true" />
+                  {isUploading ? "Uploading" : "Upload"}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Snapshot</CardTitle>
+            <CardDescription>
+              {uploadResult?.snapshotId ?? "No saved snapshot"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm">
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className="text-muted-foreground">Source</span>
+              <span className="font-medium capitalize">{source}</span>
+            </div>
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className="text-muted-foreground">Holdings</span>
+              <span className="font-medium">
+                {uploadResult === null ? "--" : uploadResult.holdings.length}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Status</span>
+              <span className="font-medium">
+                {uploadResult === null
+                  ? "Ready"
+                  : uploadResult.persisted === false
+                    ? "Preview"
+                    : "Saved"}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {error !== null && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -143,27 +212,14 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {uploadResult !== null && (
-        <div className="grid gap-4 md:grid-cols-3">
-          <StatCard
-            label="Total Value"
-            value={rupeeFormatter.format(uploadResult.totals.totalValue)}
-          />
-          <StatCard
-            label="Total Gain/Loss"
-            value={rupeeFormatter.format(uploadResult.totals.totalGain)}
-            valueClassName={gainTone}
-          />
-          <StatCard
-            label="Gain %"
-            value={`${percentFormatter.format(uploadResult.totals.totalGainPct)}%`}
-            valueClassName={gainTone}
-          />
+      {warning !== null && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {warning}
         </div>
       )}
 
       {hasHoldings && uploadResult !== null && (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(360px,0.8fr)]">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.8fr)]">
           <Card>
             <CardHeader>
               <CardTitle>Holdings</CardTitle>
@@ -198,11 +254,13 @@ function StatCard({
 }) {
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="pb-1">
         <CardTitle className="text-sm text-muted-foreground">{label}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className={cn("text-2xl font-semibold", valueClassName)}>{value}</div>
+        <div className={cn("text-2xl font-semibold tracking-tight", valueClassName)}>
+          {value}
+        </div>
       </CardContent>
     </Card>
   );
@@ -229,7 +287,7 @@ function isUploadResponse(value: unknown): value is UploadResponse {
   const candidate = value as Partial<UploadResponse>;
 
   return (
-    typeof candidate.snapshotId === "string" &&
+    (typeof candidate.snapshotId === "string" || candidate.snapshotId === null) &&
     isPortfolioTotals(candidate.totals) &&
     Array.isArray(candidate.holdings)
   );
