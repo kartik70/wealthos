@@ -1,7 +1,7 @@
 "use client";
 
 import { Upload } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { AllocationChart } from "@/components/dashboard/AllocationChart";
 import { HoldingsTable } from "@/components/portfolio/HoldingsTable";
@@ -26,6 +26,14 @@ interface UploadResponse {
   warning?: string;
 }
 
+interface LatestSnapshotResponse {
+  snapshotId: string;
+  totals: PortfolioTotals;
+  holdings: Holding[];
+  source: "kite" | "groww";
+  createdAt: string;
+}
+
 const rupeeFormatter = new Intl.NumberFormat("en-IN", {
   style: "currency",
   currency: "INR",
@@ -43,6 +51,35 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [snapshotSource, setSnapshotSource] = useState<"kite" | "groww">("kite");
+
+  // Fetch the latest snapshot on component mount
+  useEffect(() => {
+    async function fetchLatestSnapshot() {
+      try {
+        const response = await fetch("/api/snapshots/latest");
+        if (response.ok) {
+          const data: LatestSnapshotResponse = await response.json();
+          setUploadResult({
+            snapshotId: data.snapshotId,
+            totals: data.totals,
+            holdings: data.holdings,
+            persisted: true,
+          });
+          setSnapshotSource(data.source);
+          setSource(data.source);
+        }
+        // If no snapshot exists (404), that's fine - show empty state
+      } catch (err) {
+        console.error("Failed to fetch latest snapshot:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchLatestSnapshot();
+  }, []);
 
   const totals = uploadResult?.totals;
   const hasHoldings = uploadResult !== null && uploadResult.holdings.length > 0;
@@ -184,7 +221,7 @@ export default function DashboardPage() {
           <CardContent className="grid gap-3 text-sm">
             <div className="flex items-center justify-between border-b pb-2">
               <span className="text-muted-foreground">Source</span>
-              <span className="font-medium capitalize">{source}</span>
+              <span className="font-medium capitalize">{snapshotSource}</span>
             </div>
             <div className="flex items-center justify-between border-b pb-2">
               <span className="text-muted-foreground">Holdings</span>
@@ -216,6 +253,19 @@ export default function DashboardPage() {
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {warning}
         </div>
+      )}
+
+      {!isLoading && uploadResult === null && (
+        <Card className="border border-dashed">
+          <CardContent className="flex flex-col items-center justify-center gap-4 py-12">
+            <div className="text-center">
+              <h3 className="font-semibold">No portfolio data yet</h3>
+              <p className="text-sm text-muted-foreground">
+                Upload your first CSV file to get started
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {hasHoldings && uploadResult !== null && (

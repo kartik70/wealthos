@@ -1,4 +1,4 @@
-import { createSupabaseAdminClient, createSupabaseServerClient } from "../../../lib/db/supabase";
+import {  createSupabaseServerClient } from "../../../lib/db/supabase";
 import {
   calcAllocationPct,
   calcPortfolioTotals,
@@ -38,7 +38,7 @@ export async function POST(request: Request): Promise<Response> {
 
     const holdings = calcAllocationPct(parsedHoldings);
     const totals = calcPortfolioTotals(holdings);
-    const supabase = createSupabaseAdminClient();
+    const supabase =await createSupabaseServerClient();
     const userId = "local-dev-user";
 
     const snapshotInsert: SnapshotInsert = {
@@ -50,7 +50,6 @@ export async function POST(request: Request): Promise<Response> {
       source,
       raw_data: null,
     };
-    console.log("Supabase URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
     const { data: snapshot, error: snapshotError } = await supabase
       .from("portfolio_snapshots")
       .insert(snapshotInsert)
