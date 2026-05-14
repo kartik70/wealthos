@@ -8,7 +8,6 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import type { ValueType } from "recharts/types/component/DefaultTooltipContent";
 
 import type { Holding } from "@/types/portfolio";
 
@@ -18,7 +17,13 @@ interface AllocationChartProps {
 
 interface AllocationDatum {
   symbol: string;
+  name: string;
   allocationPct: number;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: Array<{ payload: AllocationDatum; value: number }>;
 }
 
 const chartColors = [
@@ -63,7 +68,7 @@ export function AllocationChart({ holdings }: AllocationChartProps) {
               />
             ))}
           </Pie>
-          <Tooltip formatter={formatTooltipValue} />
+          <Tooltip content={<CustomTooltip />} />
           <Legend
             layout="vertical"
             align="right"
@@ -82,6 +87,7 @@ function buildAllocationData(holdings: Holding[]): AllocationDatum[] {
   );
   const topHoldings = sortedHoldings.slice(0, 8).map((holding) => ({
     symbol: holding.symbol,
+    name: holding.name,
     allocationPct: holding.allocationPct,
   }));
   const othersAllocation = sortedHoldings
@@ -91,6 +97,7 @@ function buildAllocationData(holdings: Holding[]): AllocationDatum[] {
   if (othersAllocation > 0) {
     topHoldings.push({
       symbol: "Others",
+      name: "Others",
       allocationPct: othersAllocation,
     });
   }
@@ -98,12 +105,17 @@ function buildAllocationData(holdings: Holding[]): AllocationDatum[] {
   return topHoldings;
 }
 
-function formatTooltipValue(value: ValueType | undefined): [string, string] {
-  const rawValue = Array.isArray(value) ? value[0] : value;
-  const numericValue = typeof rawValue === "number" ? rawValue : Number(rawValue);
-  const formattedValue = Number.isFinite(numericValue)
-    ? `${numericValue.toFixed(2)}%`
-    : String(rawValue);
-
-  return [formattedValue, "Allocation"];
+function CustomTooltip({ active, payload }: CustomTooltipProps) {
+  if (active && payload && payload.length > 0) {
+    const data = payload[0].payload;
+    const value = payload[0].value;
+    return (
+      <div className="rounded bg-white p-2 shadow-md">
+        <p className="text-sm font-semibold">
+          {data.symbol}: {Number.isFinite(value) ? value.toFixed(2) : 0}%
+        </p>
+      </div>
+    );
+  }
+  return null;
 }
