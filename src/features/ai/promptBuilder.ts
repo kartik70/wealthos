@@ -1,4 +1,11 @@
-import type { Holding, HoldingConcentration, PortfolioSnapshot } from "@/types/portfolio";
+import type {
+  HealthScoreResult,
+  Holding,
+  HoldingConcentration,
+  PortfolioSnapshot,
+  SectorAllocation,
+  TaxSummary,
+} from "@/types/portfolio";
 
 export function buildPortfolioPrompt(
   snapshot: PortfolioSnapshot,
@@ -71,4 +78,65 @@ Return a JSON object with this exact structure, with raw JSON only, no markdown:
 Return raw JSON only. No markdown, no code fences, no explanation. Start your response with { and end with }.`;
 
   return prompt;
+}
+
+export function buildDetailedInsightPrompt(
+  snapshot: PortfolioSnapshot,
+  holdings: Holding[],
+  healthScore: HealthScoreResult,
+  sectors: SectorAllocation[],
+  taxSummary: TaxSummary,
+): string {
+  const payload = {
+    snapshot: {
+      id: snapshot.id,
+      createdAt: snapshot.createdAt,
+      source: snapshot.source,
+      totalValue: snapshot.totalValue,
+      totalCost: snapshot.totalCost,
+      totalGain: snapshot.totalGain,
+      totalGainPct: snapshot.totalGainPct,
+    },
+    holdings,
+    healthScore,
+    sectors,
+    taxSummary,
+  };
+
+  return `You are the interpretation layer for WealthOS.
+
+Use only the deterministic numbers provided below. Do not calculate new finance metrics. Do not predict prices.
+
+Return ONLY raw JSON in this exact shape:
+{
+  "portfolioStory": "3-4 sentence narrative about this portfolio",
+  "healthcommentary": "what is dragging the score down and how to improve",
+  "sectorCommentary": { "sector": "commentary" },
+  "stockAnalysis": [
+    {
+      "symbol": "string",
+      "verdict": "AVERAGE_DOWN|EXIT|HOLD|BOOK_PROFIT",
+      "reasoning": "string",
+      "taxNote": "string"
+    }
+  ],
+  "riskProfile": "what kind of investor this portfolio reflects",
+  "actionPlan": [
+    {
+      "priority": 1,
+      "action": "string",
+      "impact": "HIGH|MEDIUM|LOW",
+      "urgency": "NOW|THIS_MONTH|THIS_QUARTER"
+    }
+  ]
+}
+
+Rules:
+- portfolioStory must be 3-4 sentences.
+- actionPlan priorities must be numeric 1-5.
+- sectorCommentary keys should map to sector names from the provided sector allocation list.
+- Return valid JSON only. No markdown, no code fences, no extra text.
+
+Deterministic data:
+${JSON.stringify(payload, null, 2)}`;
 }

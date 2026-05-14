@@ -4,6 +4,8 @@ import type { Holding, PortfolioTotals, InsightResponse } from "@/types/portfoli
 
 export const runtime = "nodejs";
 
+const DETAILED_SUMMARY_MARKER = "__DETAILED_INSIGHT__";
+
 interface LatestSnapshotResponse {
   snapshotId: string;
   totals: PortfolioTotals;
@@ -110,6 +112,7 @@ export async function GET(): Promise<Response> {
       .from("ai_insights")
       .select("summary,recommendations,alerts,created_at")
       .eq("snapshot_id", snapshotData.id)
+      .neq("summary", DETAILED_SUMMARY_MARKER)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();

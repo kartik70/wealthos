@@ -1,9 +1,7 @@
 "use client";
 
-import { AlertCircle, TrendingDown, TrendingUp, Sparkles } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { InsightResponse } from "@/types/portfolio";
 import { cn } from "@/lib/utils";
 
@@ -20,31 +18,29 @@ export function InsightCard({
   isGenerating,
   hasHoldings,
 }: InsightCardProps) {
+  const generatedLabel = formatGeneratedAt(insight?.generatedAt);
+
   return (
     <>
       {/* Summary */}
       {insight && (
         <div className="space-y-3">
-          <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-            Summary
-          </div>
+          <SectionLabel label="Summary" />
           <p className="text-sm leading-relaxed text-foreground">{insight.summary}</p>
 
           {/* Recommendations */}
           {insight.recommendations.length > 0 && (
-            <div className="space-y-1 pt-2">
-              <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                Recommendations
-              </div>
+            <div className="space-y-2 pt-2">
+              <SectionLabel label="Recommendations" />
               {insight.recommendations.map((rec, index) => (
                 <div
                   key={index}
-                  className="flex items-center gap-2 rounded-lg border border-muted bg-muted/30 px-3 py-2 text-sm"
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-muted bg-muted/30 px-3 py-2"
                 >
                   <ActionBadge action={rec.action} />
                   <PriorityBadge priority={rec.priority} />
-                  <span className="font-mono font-medium text-foreground">{rec.symbol}</span>
-                  <span className="text-muted-foreground">{rec.reason}</span>
+                  <span className="font-mono font-medium text-sm text-foreground">{rec.symbol}</span>
+                  <span className="text-sm text-muted-foreground">{rec.reason}</span>
                 </div>
               ))}
             </div>
@@ -54,21 +50,19 @@ export function InsightCard({
 
       {/* Alerts */}
       {insight && insight.alerts.length > 0 && (
-        <div className="space-y-1 pt-2">
-          <div className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-            Alerts
-          </div>
+        <div className="space-y-2 pt-2">
+          <SectionLabel label="Alerts" />
 
           {insight.alerts.map((alert, index) => (
             <div
               key={index}
               className={cn(
-                "flex items-start gap-3 rounded-lg border p-3 text-sm",
+                "flex items-start gap-3 rounded-lg border bg-muted/40 p-3 text-sm",
                 alert.urgency === "ACTION_NEEDED"
-                  ? "border-red-300 bg-red-50"
+                  ? "border-l-2 border-l-red-500"
                   : alert.urgency === "WARNING"
-                    ? "border-amber-300 bg-amber-50"
-                    : "border-blue-300 bg-blue-50",
+                    ? "border-l-2 border-l-amber-500"
+                    : "border-l-2 border-l-slate-300",
               )}
             >
               <AlertCircle
@@ -86,22 +80,15 @@ export function InsightCard({
                   <span className="text-xs font-semibold uppercase">{alert.type}</span>
                   <UrgencyBadge urgency={alert.urgency} />
                 </div>
-                <p
-                  className={cn(
-                    "text-sm",
-                    alert.urgency === "ACTION_NEEDED"
-                      ? "text-red-700"
-                      : alert.urgency === "WARNING"
-                        ? "text-amber-700"
-                        : "text-blue-700",
-                  )}
-                >
-                  {alert.message}
-                </p>
+                <p className="text-sm text-foreground">{alert.message}</p>
               </div>
             </div>
           ))}
         </div>
+      )}
+
+      {insight && generatedLabel !== null && (
+        <div className="pt-2 text-xs text-muted-foreground">Generated {generatedLabel}</div>
       )}
 
       {/* Empty state */}
@@ -116,20 +103,27 @@ export function InsightCard({
   );
 }
 
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">{label}</p>
+      <div className="h-px w-full bg-border" />
+    </div>
+  );
+}
+
 function ActionBadge({ action }: { action: string }) {
-  const variants: Record<string, { bg: string; text: string; icon: React.ComponentType<{ className?: string }> }> = {
-    BUY: { bg: "bg-emerald-100", text: "text-emerald-700", icon: TrendingUp },
-    SELL: { bg: "bg-red-100", text: "text-red-700", icon: TrendingDown },
-    HOLD: { bg: "bg-gray-100", text: "text-gray-700", icon: AlertCircle },
-    REVIEW: { bg: "bg-blue-100", text: "text-blue-700", icon: AlertCircle },
+  const variants: Record<string, { bg: string; text: string }> = {
+    BUY: { bg: "bg-emerald-100", text: "text-emerald-700" },
+    SELL: { bg: "bg-red-100", text: "text-red-700" },
+    HOLD: { bg: "bg-gray-100", text: "text-gray-700" },
+    REVIEW: { bg: "bg-blue-100", text: "text-blue-700" },
   };
 
   const variant = variants[action] || variants.HOLD;
-  const Icon = variant.icon;
 
   return (
-    <div className={cn("flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold", variant.bg, variant.text)}>
-      <Icon className="size-3" />
+    <div className={cn("rounded px-2 py-0.5 text-xs font-semibold", variant.bg, variant.text)}>
       {action}
     </div>
   );
@@ -161,4 +155,30 @@ function UrgencyBadge({ urgency }: { urgency: string }) {
       {urgency.replace("_", " ")}
     </Badge>
   );
+}
+
+function formatGeneratedAt(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  const date = new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(parsed);
+  const time = new Intl.DateTimeFormat("en-IN", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  })
+    .format(parsed)
+    .toLowerCase();
+
+  return `${date}, ${time}`;
 }

@@ -104,6 +104,14 @@ export default function DashboardPage() {
     return uploadResult.totals.totalGain >= 0 ? "text-emerald-700" : "text-red-700";
   }, [uploadResult]);
 
+  const holdingsInLoss = useMemo(() => {
+    if (uploadResult === null) {
+      return 0;
+    }
+
+    return uploadResult.holdings.filter((holding) => holding.unrealisedGain < 0).length;
+  }, [uploadResult]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -204,7 +212,7 @@ export default function DashboardPage() {
         <p className="text-sm text-muted-foreground">Portfolio snapshot</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-4">
         <StatCard
           label="Total Value"
           value={totals === undefined ? "--" : rupeeFormatter.format(totals.totalValue)}
@@ -222,6 +230,11 @@ export default function DashboardPage() {
               : `${percentFormatter.format(totals.totalGainPct)}%`
           }
           valueClassName={totals === undefined ? undefined : gainTone}
+        />
+        <StatCard
+          label="Holdings in Loss"
+          value={uploadResult === null ? "--" : String(holdingsInLoss)}
+          valueClassName={uploadResult === null ? undefined : "text-red-700"}
         />
       </div>
 
@@ -405,12 +418,12 @@ function StatCard({
   valueClassName?: string;
 }) {
   return (
-    <Card>
-      <CardHeader className="pb-1">
-        <CardTitle className="text-sm text-muted-foreground">{label}</CardTitle>
+    <Card size="sm">
+      <CardHeader className="pb-0">
+        <CardTitle className="text-xs text-muted-foreground">{label}</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className={cn("text-2xl font-semibold tracking-tight", valueClassName)}>
+      <CardContent className="pt-1">
+        <div className={cn("text-lg font-semibold tracking-tight", valueClassName)}>
           {value}
         </div>
       </CardContent>

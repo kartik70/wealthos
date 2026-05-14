@@ -1,7 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { TextBlock } from "@anthropic-ai/sdk/resources/messages";
 
-import type { Alert, InsightResponse, Recommendation } from "../../types/portfolio";
+import type {
+  Alert,
+  DetailedActionPlan,
+  DetailedInsightResponse,
+  DetailedStockAnalysis,
+  InsightResponse,
+  Recommendation,
+} from "../../types/portfolio";
 
 const INSIGHT_RESPONSE_SCHEMA = {
   type: "object",
@@ -69,6 +76,34 @@ export async function generateInsight(prompt: string): Promise<InsightResponse> 
 return parseInsightResponse(clean);
 }
 
+export async function generateDetailedInsight(
+  prompt: string,
+): Promise<DetailedInsightResponse> {
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 1800,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = response.content
+    .filter((block): block is TextBlock => block.type === "text")
+    .map((block) => block.text)
+    .join("")
+    .trim();
+
+  if (text === "") {
+    throw new Error("Claude returned an empty detailed insight response");
+  }
+
+  const clean = text
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
+
+  return parseDetailedInsightResponse(clean);
+}
+
 export function parseInsightResponse(responseText: string): InsightResponse {
   const parsed: unknown = JSON.parse(responseText);
 
@@ -92,6 +127,84 @@ function isInsightResponse(value: unknown): value is InsightResponse {
     value.alerts.every(isAlert) &&
     typeof value.generatedAt === "string"
   );
+}
+
+export function parseDetailedInsightResponse(
+  responseText: string,
+): DetailedInsightResponse {
+  const parsed: unknown = JSON.parse(responseText);
+
+  if (!isDetailedInsightResponse(parsed)) {
+    throw new Error("Claude returned an invalid detailed insight response");
+  }
+
+  return parsed;
+}
+
+function isDetailedInsightResponse(
+  value: unknown,
+): value is DetailedInsightResponse {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.portfolioStory === "string" &&
+    typeof value.healthcommentary === "string" &&
+    isRecord(value.sectorCommentary) &&
+    Object.values(value.sectorCommentary).every((entry) => typeof entry === "string") &&
+    Array.isArray(value.stockAnalysis) &&
+    value.stockAnalysis.every(isDetailedStockAnalysis) &&
+    typeof value.riskProfile === "string" &&
+    Array.isArray(value.actionPlan) &&
+    value.actionPlan.every(isDetailedActionPlan)
+  );
+}
+
+function isDetailedStockAnalysis(value: unknown): value is DetailedStockAnalysis {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.symbol === "string" &&
+    isStockVerdict(value.verdict) &&
+    typeof value.reasoning === "string" &&
+    typeof value.taxNote === "string"
+  );
+}
+
+function isStockVerdict(value: unknown): value is DetailedStockAnalysis["verdict"] {
+  return (
+    value === "AVERAGE_DOWN" ||
+    value === "EXIT" ||
+    value === "HOLD" ||
+    value === "BOOK_PROFIT"
+  );
+}
+
+function isDetailedActionPlan(value: unknown): value is DetailedActionPlan {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.priority === "number" &&
+    Number.isInteger(value.priority) &&
+    value.priority >= 1 &&
+    value.priority <= 5 &&
+    typeof value.action === "string" &&
+    isImpact(value.impact) &&
+    isPlanUrgency(value.urgency)
+  );
+}
+
+function isImpact(value: unknown): value is DetailedActionPlan["impact"] {
+  return value === "HIGH" || value === "MEDIUM" || value === "LOW";
+}
+
+function isPlanUrgency(value: unknown): value is DetailedActionPlan["urgency"] {
+  return value === "NOW" || value === "THIS_MONTH" || value === "THIS_QUARTER";
 }
 
 function isRecommendation(value: unknown): value is Recommendation {
