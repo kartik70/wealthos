@@ -42,40 +42,39 @@ export async function POST(request: Request): Promise<Response> {
     const supabase = await createSupabaseServerClient();
     const userId = "local-dev-user";
 
-    // Check if a snapshot with this or a later date already exists
-    const { data: latestSnapshot, error: latestError } = await supabase
-      .from("portfolio_snapshots")
-      .select("created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // Check if a snapshot already exists for the same date
+    const startOfDay = new Date(reportDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(reportDate);
+    endOfDay.setHours(23, 59, 59, 999);
 
-    if (latestError !== null) {
+    const { data: existingSnapshots, error: checkError } = await supabase
+      .from("portfolio_snapshots")
+      .select("id")
+      .eq("user_id", userId)
+      .gte("created_at", startOfDay.toISOString())
+      .lt("created_at", endOfDay.toISOString());
+
+    if (checkError !== null) {
       return Response.json(
-        { error: `Failed to check existing snapshots: ${latestError.message}` },
+        { error: `Failed to check existing snapshots: ${checkError.message}` },
         { status: 500 },
       );
     }
 
-    if (latestSnapshot !== null) {
-      const latestDate = new Date(latestSnapshot.created_at);
-      const uploadedDate = new Date(reportDate);
-
-      if (uploadedDate <= latestDate) {
-        const formatter = new Intl.DateTimeFormat("en-IN", {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        });
-        const existingDate = formatter.format(latestDate);
-        return Response.json(
-          {
-            error: `A snapshot from ${existingDate} already exists. Please upload a more recent report.`,
-          },
-          { status: 400 },
-        );
-      }
+    if (existingSnapshots && existingSnapshots.length > 0) {
+      const formatter = new Intl.DateTimeFormat("en-IN", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+      const existingDate = formatter.format(new Date(reportDate));
+      return Response.json(
+        {
+          error: `A snapshot for ${existingDate} already exists. Please choose a different date.`,
+        },
+        { status: 400 },
+      );
     }
 
     const snapshotInsert: SnapshotInsert = {
