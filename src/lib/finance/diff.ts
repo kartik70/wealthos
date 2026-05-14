@@ -5,6 +5,14 @@ export interface SnapshotDiff {
   exitedPositions: Holding[];
   increasedPositions: Array<Holding & { previousQuantity: number }>;
   reducedPositions: Array<Holding & { previousQuantity: number }>;
+  partialExits: Array<
+    Holding & {
+      previousQuantity: number;
+      quantitySold: number;
+      realizedPnL: number;
+      pnlType: "BOOKED_PROFIT" | "BOOKED_LOSS";
+    }
+  >;
   totalValueChange: {
     absolute: number;
     percentage: number;
@@ -31,8 +39,16 @@ export function calcSnapshotDiff(
   const exitedPositions: Holding[] = [];
   const increasedPositions: Array<Holding & { previousQuantity: number }> = [];
   const reducedPositions: Array<Holding & { previousQuantity: number }> = [];
+  const partialExits: Array<
+    Holding & {
+      previousQuantity: number;
+      quantitySold: number;
+      realizedPnL: number;
+      pnlType: "BOOKED_PROFIT" | "BOOKED_LOSS";
+    }
+  > = [];
 
-  // Find new, increased, and reduced positions
+  // Find new, increased, reduced, and partial exit positions
   for (const [symbol, currHolding] of currHoldingMap.entries()) {
     const prevHolding = prevHoldingMap.get(symbol);
 
@@ -46,17 +62,30 @@ export function calcSnapshotDiff(
         previousQuantity: prevHolding.quantity,
       });
     } else if (currHolding.quantity < prevHolding.quantity) {
-      // Reduced position
-      reducedPositions.push({
-        ...currHolding,
-        previousQuantity: prevHolding.quantity,
-      });
+      // Reduced position - check if it's a full exit or partial
+      const quantitySold = prevHolding.quantity - currHolding.quantity;
+      const realizedPnL = quantitySold * (currHolding.currentPrice - prevHolding.avgCost);
+      const pnlType = realizedPnL >= 0 ? "BOOKED_PROFIT" : "BOOKED_LOSS";
+
+      if (currHolding.quantity === 0) {
+        // This is actually a full exit with final quantity 0
+        exitedPositions.push(prevHolding);
+      } else {
+        // Partial exit
+        partialExits.push({
+          ...currHolding,
+          previousQuantity: prevHolding.quantity,
+          quantitySold,
+          realizedPnL,
+          pnlType,
+        });
+      }
     }
   }
 
-  // Find exited positions
+  // Find exited positions (symbols in previous but not in current, with qty > 0)
   for (const [symbol, prevHolding] of prevHoldingMap.entries()) {
-    if (!currHoldingMap.has(symbol)) {
+    if (!currHoldingMap.has(symbol) && prevHolding.quantity > 0) {
       exitedPositions.push(prevHolding);
     }
   }
@@ -86,6 +115,7 @@ export function calcSnapshotDiff(
     exitedPositions,
     increasedPositions,
     reducedPositions,
+    partialExits,
     totalValueChange,
     totalGainChange,
   };

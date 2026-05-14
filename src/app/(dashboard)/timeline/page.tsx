@@ -33,6 +33,9 @@ type ChangePill = {
   key: string;
   label: string;
   tone: "positive" | "negative" | "neutral";
+  emoji?: string;
+  detail?: string;
+  isPartialExit?: boolean;
 };
 
 function getSnapshotPills(current: PortfolioSnapshot, previous: PortfolioSnapshot | null): ChangePill[] {
@@ -43,13 +46,17 @@ function getSnapshotPills(current: PortfolioSnapshot, previous: PortfolioSnapsho
   const diff = calcSnapshotDiff(previous, current);
   const previousHoldingMap = new Map(previous.holdings.map((holding) => [holding.symbol, holding]));
 
-  const unchanged = current.holdings
+  const unchangedCount = current.holdings
     .filter((holding) => previousHoldingMap.get(holding.symbol)?.quantity === holding.quantity)
-    .map((holding) => ({
-      key: `same-${holding.symbol}`,
-      label: `= ${holding.symbol}`,
-      tone: "neutral" as const,
-    }));
+    .length;
+
+  const unchangedPill: ChangePill[] = unchangedCount > 0
+    ? [{
+        key: "unchanged-count",
+        label: `${unchangedCount} unchanged`,
+        tone: "neutral" as const,
+      }]
+    : [];
 
   const positive = [
     ...diff.newPositions.map((holding) => ({
@@ -62,6 +69,14 @@ function getSnapshotPills(current: PortfolioSnapshot, previous: PortfolioSnapsho
       label: `↑ ${holding.symbol}`,
       tone: "positive" as const,
     })),
+    ...diff.partialExits
+      .filter((exit) => exit.pnlType === "BOOKED_PROFIT")
+      .map((exit) => ({
+        key: `partial-${exit.symbol}`,
+        label: `↗ ${exit.symbol} -${Math.round(exit.quantitySold)} qty +₹${Math.round(Math.abs(exit.realizedPnL))}`,
+        tone: "positive" as const,
+        isPartialExit: true,
+      })),
   ];
 
   const negative = [
@@ -75,9 +90,17 @@ function getSnapshotPills(current: PortfolioSnapshot, previous: PortfolioSnapsho
       label: `× ${holding.symbol}`,
       tone: "negative" as const,
     })),
+    ...diff.partialExits
+      .filter((exit) => exit.pnlType === "BOOKED_LOSS")
+      .map((exit) => ({
+        key: `partial-${exit.symbol}`,
+        label: `↘ ${exit.symbol} -${Math.round(exit.quantitySold)} qty -₹${Math.round(Math.abs(exit.realizedPnL))}`,
+        tone: "negative" as const,
+        isPartialExit: true,
+      })),
   ];
 
-  return [...positive, ...negative, ...unchanged];
+  return [...positive, ...negative, ...unchangedPill];
 }
 
 export default function TimelinePage() {
@@ -218,12 +241,13 @@ export default function TimelinePage() {
               </div>
 
               {valueDelta !== null && (
-                <div className="mt-3 flex items-center gap-2 pl-1">
-                  <span className="h-px w-8 bg-border/80" />
-                  <p className={cn("text-xs font-mono", valueDeltaTone)}>
-                    {valueDelta > 0 ? "+" : valueDelta < 0 ? "-" : ""}
+                <div className="mt-3 flex items-center justify-center gap-2 font-mono text-xs text-muted-foreground">
+                  <span>―――</span>
+                  <p>
+                    {valueDelta > 0 ? "+" : valueDelta < 0 ? "−" : ""}
                     {rupeeFormatter.format(Math.abs(valueDelta))}
                   </p>
+                  <span>―――</span>
                 </div>
               )}
             </div>
