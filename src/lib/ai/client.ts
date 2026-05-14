@@ -46,16 +46,10 @@ const client = new Anthropic({
 
 export async function generateInsight(prompt: string): Promise<InsightResponse> {
   const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 1000,
-    messages: [{ role: "user", content: prompt }],
-    output_config: {
-      format: {
-        type: "json_schema",
-        schema: INSIGHT_RESPONSE_SCHEMA,
-      },
-    },
-  });
+  model: "claude-sonnet-4-20250514",
+  max_tokens: 1000,
+  messages: [{ role: "user", content: prompt }],
+});
 
   const text = response.content
     .filter((block): block is TextBlock => block.type === "text")
@@ -66,8 +60,13 @@ export async function generateInsight(prompt: string): Promise<InsightResponse> 
   if (text === "") {
     throw new Error("Claude returned an empty insight response");
   }
+  const clean = text
+  .replace(/^```json\s*/i, "")
+  .replace(/^```\s*/i, "")
+  .replace(/```\s*$/i, "")
+  .trim();
 
-  return parseInsightResponse(text);
+return parseInsightResponse(clean);
 }
 
 export function parseInsightResponse(responseText: string): InsightResponse {

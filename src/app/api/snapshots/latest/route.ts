@@ -1,6 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/db/supabase";
 import type { Database } from "@/types/db";
-import type { Holding, PortfolioTotals } from "@/types/portfolio";
+import type { Holding, PortfolioTotals, InsightResponse } from "@/types/portfolio";
 
 export const runtime = "nodejs";
 
@@ -10,6 +10,7 @@ interface LatestSnapshotResponse {
   holdings: Holding[];
   source: "kite" | "groww";
   createdAt: string;
+  insight?: InsightResponse;
 }
 
 export async function GET(): Promise<Response> {
@@ -62,23 +63,34 @@ export async function GET(): Promise<Response> {
     }
 
     // Transform the response to match the expected format
-    const holdings = (snapshot.holdings as Array<{
-      symbol: string;
-      name: string;
-      quantity: number;
-      avg_cost: number;
-      current_price: number;
-      current_value: number;
-      unrealised_gain: number;
-      unrealised_gain_pct: number;
-      allocation_pct: number;
-    }>) || [];
+    const snapshotData = snapshot as unknown as {
+      id: string;
+      total_value: number;
+      total_cost: number;
+      total_gain: number;
+      total_gain_pct: number;
+      source: string;
+      created_at: string;
+      holdings: Array<{
+        symbol: string;
+        name: string;
+        quantity: number;
+        avg_cost: number;
+        current_price: number;
+        current_value: number;
+        unrealised_gain: number;
+        unrealised_gain_pct: number;
+        allocation_pct: number;
+      }>;
+    };
+
+    const holdings = snapshotData.holdings || [];
 
     const totals: PortfolioTotals = {
-      totalValue: snapshot.total_value,
-      totalCost: snapshot.total_cost,
-      totalGain: snapshot.total_gain,
-      totalGainPct: snapshot.total_gain_pct,
+      totalValue: snapshotData.total_value,
+      totalCost: snapshotData.total_cost,
+      totalGain: snapshotData.total_gain,
+      totalGainPct: snapshotData.total_gain_pct,
     };
 
     const mappedHoldings: Holding[] = holdings.map((h) => ({
@@ -93,12 +105,37 @@ export async function GET(): Promise<Response> {
       allocationPct: h.allocation_pct,
     }));
 
+    // Fetch the most recent insight for this snapshot
+    const { data: insightRow, error: insightError } = await supabase
+      .from("ai_insights")
+      .select("summary,recommendations,alerts,created_at")
+      .eq("snapshot_id", snapshotData.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (insightError !== null) {
+      console.error("Failed to fetch insight:", insightError.message);
+      // Don't fail the entire request if insight fetch fails
+    }
+
+    const insight =
+      insightRow && insightRow.summary && insightRow.recommendations && insightRow.alerts
+        ? {
+            summary: insightRow.summary as string,
+            recommendations: insightRow.recommendations as unknown as InsightResponse["recommendations"],
+            alerts: insightRow.alerts as unknown as InsightResponse["alerts"],
+            generatedAt: insightRow.created_at || new Date().toISOString(),
+          }
+        : undefined;
+
     const response: LatestSnapshotResponse = {
-      snapshotId: snapshot.id,
+      snapshotId: snapshotData.id,
       totals,
       holdings: mappedHoldings,
-      source: snapshot.source as "kite" | "groww",
-      createdAt: snapshot.created_at,
+      source: snapshotData.source as "kite" | "groww",
+      createdAt: snapshotData.created_at,
+      insight,
     };
 
     return Response.json(response, { status: 200 });

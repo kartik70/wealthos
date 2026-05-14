@@ -80,7 +80,7 @@ export async function POST(request: Request): Promise<Response> {
     const insight = await generateInsight(prompt);
     const { error: insertError } = await supabase.from("ai_insights").insert({
       snapshot_id: snapshot.id,
-      user_id: snapshot.user_id,
+      user_id: "local-dev-user",
       summary: insight.summary,
       recommendations: insight.recommendations as unknown as Json,
       alerts: insight.alerts as unknown as Json,

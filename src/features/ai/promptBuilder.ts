@@ -1,0 +1,74 @@
+import type { Holding, HoldingConcentration, PortfolioSnapshot } from "@/types/portfolio";
+
+export function buildPortfolioPrompt(
+  snapshot: PortfolioSnapshot,
+  concentration: HoldingConcentration[],
+  holdings: Holding[],
+): string {
+  const concentrationText = concentration
+    .map(
+      (c) =>
+        `- ${c.symbol}: ${c.allocationPct.toFixed(2)}% (High concentration: ${c.isHighConcentration ? "Yes" : "No"})`,
+    )
+    .join("\n");
+
+  const holdingsText = holdings
+    .map(
+      (h) =>
+        `- ${h.symbol} (${h.name}): Qty ${h.quantity}, Avg Cost ₹${h.avgCost.toFixed(2)}, Current ₹${h.currentPrice.toFixed(2)}, Value ₹${h.currentValue.toFixed(2)}, Gain ₹${h.unrealisedGain.toFixed(2)} (${h.unrealisedGainPct.toFixed(2)}%)`,
+    )
+    .join("\n");
+
+  const prompt = `You are a portfolio analysis expert. Analyze this portfolio snapshot and provide actionable insights.
+
+Portfolio Summary:
+- Total Value: ₹${snapshot.totalValue.toFixed(2)}
+- Total Cost: ₹${snapshot.totalCost.toFixed(2)}
+- Total Gain/Loss: ₹${snapshot.totalGain.toFixed(2)} (${snapshot.totalGainPct.toFixed(2)}%)
+
+Holdings:
+${holdingsText}
+
+Concentration Analysis:
+${concentrationText}
+
+Based on this analysis, provide:
+
+1. A concise summary (2-3 sentences) of the portfolio's current state and key takeaways.
+2. Specific recommendations for each position or the portfolio overall. For each recommendation, specify:
+   - The action: BUY, SELL, HOLD, or REVIEW
+   - The symbol
+   - The reason for this action
+   - Priority level: LOW, MEDIUM, or HIGH
+
+3. Alerts for important considerations like:
+   - CONCENTRATION: If any position is over 20% allocation
+   - TAX: Tax planning considerations if applicable
+   - LOSS: Significant unrealized losses
+   - GOAL: If portfolio seems misaligned with typical goals
+   - REBALANCE: If portfolio needs rebalancing
+
+Return a JSON object with this exact structure, with raw JSON only, no markdown:
+{
+  "summary": "string",
+  "recommendations": [
+    {
+      "action": "BUY|SELL|HOLD|REVIEW",
+      "symbol": "string",
+      "reason": "string",
+      "priority": "LOW|MEDIUM|HIGH"
+    }
+  ],
+  "alerts": [
+    {
+      "type": "CONCENTRATION|TAX|LOSS|GOAL|REBALANCE",
+      "message": "string",
+      "urgency": "INFO|WARNING|ACTION_NEEDED"
+    }
+  ],
+  "generatedAt": "ISO timestamp string"
+}
+Return raw JSON only. No markdown, no code fences, no explanation. Start your response with { and end with }.`;
+
+  return prompt;
+}

@@ -1,10 +1,11 @@
 "use client";
 
-import { Upload } from "lucide-react";
+import { Upload, Sparkles } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { AllocationChart } from "@/components/dashboard/AllocationChart";
 import { HoldingsTable } from "@/components/portfolio/HoldingsTable";
+import { InsightCard } from "@/components/insights/InsightCard";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import type { Holding, PortfolioTotals } from "@/types/portfolio";
+import type { Holding, PortfolioTotals, InsightResponse } from "@/types/portfolio";
 
 interface UploadResponse {
   snapshotId: string | null;
@@ -32,6 +33,7 @@ interface LatestSnapshotResponse {
   holdings: Holding[];
   source: "kite" | "groww";
   createdAt: string;
+  insight?: InsightResponse;
 }
 
 const rupeeFormatter = new Intl.NumberFormat("en-IN", {
@@ -53,6 +55,9 @@ export default function DashboardPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [snapshotSource, setSnapshotSource] = useState<"kite" | "groww">("kite");
+  const [insight, setInsight] = useState<InsightResponse | null>(null);
+  const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
+  const [insightError, setInsightError] = useState<string | null>(null);
 
   // Fetch the latest snapshot on component mount
   useEffect(() => {
@@ -69,6 +74,10 @@ export default function DashboardPage() {
           });
           setSnapshotSource(data.source);
           setSource(data.source);
+          // If a saved insight exists for this snapshot, display it immediately
+          if (data.insight) {
+            setInsight(data.insight);
+          }
         }
         // If no snapshot exists (404), that's fine - show empty state
       } catch (err) {
@@ -135,6 +144,52 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleGenerateInsights() {
+    if (uploadResult?.snapshotId === null || uploadResult?.snapshotId === undefined) {
+      setInsightError("No snapshot available. Please upload a CSV first.");
+      return;
+    }
+
+    setIsGeneratingInsight(true);
+    setInsightError(null);
+    setInsight(null);
+
+    try {
+      const response = await fetch("/api/insights", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ snapshotId: uploadResult.snapshotId }),
+      });
+
+      const payload: unknown = await response.json();
+
+      if (!response.ok) {
+        const errorMsg =
+          typeof payload === "object" &&
+          payload !== null &&
+          "error" in payload &&
+          typeof payload.error === "string"
+            ? payload.error
+            : "Failed to generate insights";
+        setInsightError(errorMsg);
+        return;
+      }
+
+      if (!isInsightResponse(payload)) {
+        setInsightError("Invalid insight response format");
+        return;
+      }
+
+      setInsight(payload);
+    } catch (err) {
+      setInsightError(
+        err instanceof Error ? err.message : "Failed to generate insights",
+      );
+    } finally {
+      setIsGeneratingInsight(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1 border-b pb-4">
@@ -164,6 +219,35 @@ export default function DashboardPage() {
           valueClassName={totals === undefined ? undefined : gainTone}
         />
       </div>
+
+      {/* AI Insights Section - moved to top */}
+      {hasHoldings && uploadResult !== null && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <div>
+              <CardTitle>AI Insights</CardTitle>
+              <CardDescription>Portfolio analysis and recommendations</CardDescription>
+            </div>
+            <Button
+              onClick={handleGenerateInsights}
+              disabled={isGeneratingInsight}
+              variant="default"
+              size="sm"
+            >
+              <Sparkles className="size-4" aria-hidden="true" />
+              {isGeneratingInsight ? "Generating..." : "Generate"}
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <InsightCard
+              insight={insight}
+              onGenerateInsights={handleGenerateInsights}
+              isGenerating={isGeneratingInsight}
+              hasHoldings={hasHoldings}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <Card>
@@ -355,5 +439,20 @@ function isPortfolioTotals(value: unknown): value is PortfolioTotals {
     typeof candidate.totalCost === "number" &&
     typeof candidate.totalGain === "number" &&
     typeof candidate.totalGainPct === "number"
+  );
+}
+
+function isInsightResponse(value: unknown): value is InsightResponse {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<InsightResponse>;
+
+  return (
+    typeof candidate.summary === "string" &&
+    Array.isArray(candidate.recommendations) &&
+    Array.isArray(candidate.alerts) &&
+    typeof candidate.generatedAt === "string"
   );
 }
