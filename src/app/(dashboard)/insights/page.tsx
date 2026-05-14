@@ -219,6 +219,7 @@ export default function InsightsPage() {
       {/* Page Header */}
       <div className="mb-8 flex flex-col gap-4 border-b border-border pb-6">
         <div className="flex items-start justify-between gap-6">
+
           <div className="flex-1">
             <h1 className="font-heading text-3xl font-light tracking-tight">Portfolio Analysis</h1>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -257,7 +258,7 @@ export default function InsightsPage() {
           {/* Left: Large Score with Ring */}
           <div className="flex items-center justify-center">
             <div className="relative size-40">
-              <svg viewBox="0 0 120 120" className="size-full -rotate-90">
+              <svg viewBox="0 0 120 120" className="size-full">
                 {/* Background circle */}
                 <circle cx="60" cy="60" r="52" fill="none" stroke="#e5e7eb" strokeWidth="8" />
                 {/* Progress circle */}
@@ -272,12 +273,14 @@ export default function InsightsPage() {
                   strokeDasharray={circumference}
                   strokeDashoffset={progressOffset}
                   className="transition-all"
+                  transform="rotate(-90 60 60)"
                 />
                 {/* Score text */}
                 <text
                   x="60"
-                  y="70"
+                  y="66"
                   textAnchor="middle"
+                  dominantBaseline="middle"
                   fontSize="48"
                   fontWeight="300"
                   fontFamily="monospace"
@@ -323,26 +326,51 @@ export default function InsightsPage() {
         <SectionHeading label={sectionOrder[1]} />
 
         {/* Stacked Bar */}
-        <div className="mb-8 relative flex h-8 w-full overflow-hidden rounded-full bg-muted">
-          {sectors.map((sector) => (
-            <div
-              key={sector.sector}
-              className="h-full border-r border-background/30 last:border-r-0 relative group cursor-pointer transition-opacity hover:opacity-80"
-              style={{
-                width: `${sector.allocationPct}%`,
-                backgroundColor: sectorColors[sector.sector] || sectorColors["Other"],
-              }}
-              onMouseEnter={() => setHoveredSector(sector.sector)}
-              onMouseLeave={() => setHoveredSector(null)}
-            >
-              {/* Tooltip */}
-              {hoveredSector === sector.sector && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 bg-foreground text-background text-xs font-mono rounded whitespace-nowrap z-10 pointer-events-none">
-                  {sector.sector}: {percentFormatter.format(sector.allocationPct)}%
+        <div className="mb-8 relative">
+          <div className="flex h-8 w-full overflow-hidden rounded-full bg-muted relative z-0">
+            {sectors.map((sector) => (
+              <div
+                key={sector.sector}
+                className="h-full border-r border-background/30 last:border-r-0 relative group cursor-pointer transition-opacity hover:opacity-80"
+                style={{
+                  width: `${sector.allocationPct}%`,
+                  backgroundColor: sectorColors[sector.sector] || sectorColors["Other"],
+                }}
+                onMouseEnter={() => setHoveredSector(sector.sector)}
+                onMouseLeave={() => setHoveredSector(null)}
+              />
+            ))}
+          </div>
+          {/* Tooltip rendered above bar, not clipped */}
+          {hoveredSector && (() => {
+            const hovered = sectors.find(s => s.sector === hoveredSector);
+            if (!hovered) return null;
+            // Calculate left offset for tooltip center
+            let left = 0;
+            let found = false;
+            for (const s of sectors) {
+              if (s.sector === hoveredSector) {
+                found = true;
+                left += (s.allocationPct / 2);
+                break;
+              }
+              left += s.allocationPct;
+            }
+            return (
+              <div
+                className="absolute z-20 pointer-events-none"
+                style={{
+                  left: `calc(${left}% )`,
+                  top: '-0.5rem',
+                  transform: 'translateX(-50%) translateY(-100%)',
+                }}
+              >
+                <div className="px-3 py-1.5 bg-foreground text-background text-xs font-mono rounded whitespace-nowrap shadow-lg">
+                  {hovered.sector}: {percentFormatter.format(hovered.allocationPct)}%
                 </div>
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Sector Rows */}
