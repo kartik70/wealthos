@@ -309,14 +309,41 @@ The daily analysis flow:
 
 ---
 
-## UI conventions
+## UI Design Guidelines
 
-- Design language: calm, data-dense, institutional. Inspired by Linear and Vercel.
-- No neon, no gradients, no crypto-casino aesthetics.
-- Dark mode supported via Tailwind `dark:` classes.
-- All monetary values formatted as Indian rupees: `₹1,23,456`
-- All percentage values to 2 decimal places: `12.34%`
-- Dates in `DD MMM YYYY` format: `14 May 2026`
+### Design language
+Calm, data-dense, institutional. Inspired by Linear and Vercel.
+No gradients, no shadows, no rounded corners on everything.
+Dark mode first.
+
+### Colors (Tailwind classes only)
+- Background: bg-background
+- Surface/cards: bg-card or bg-muted/40
+- Borders: border-border (use sparingly, 1px only)
+- Primary text: text-foreground
+- Muted text: text-muted-foreground
+- Positive/gain: text-emerald-500
+- Negative/loss: text-rose-500
+- Accent/active: text-primary
+
+### Typography
+- Page titles: text-xl font-medium
+- Section labels: text-sm font-medium text-muted-foreground uppercase tracking-wide
+- Table headers: text-xs font-medium text-muted-foreground uppercase
+- Body: text-sm
+- Numbers/values: font-mono text-sm
+
+### Layout
+- Sidebar: fixed left, 220px wide, bg-background border-r border-border
+- Main content: ml-[220px], p-8, max-w-7xl
+- Cards: rounded-lg border border-border bg-card p-6, no drop shadows
+- Stat cards: 4 in a row, each showing label + large value + sub-label
+
+### Formatting
+- Currency: ₹1,23,456 (Indian format)
+- Percentages: +12.34% or -4.56% with color
+- Dates: 14 May 2026
+- Positive values prefixed with +, negative with -
 
 ---
 
