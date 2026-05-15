@@ -1,10 +1,12 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import { Sparkles, Upload } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -54,11 +56,6 @@ const dateFormatter = new Intl.DateTimeFormat("en-IN", {
   year: "numeric",
 });
 
-const timeFormatter = new Intl.DateTimeFormat("en-IN", {
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
 const sectorColors: Record<string, string> = {
   "Power": "#c4956a",
   "Financials": "#5b7fa6",
@@ -103,7 +100,7 @@ export default function InsightsPage() {
             setHoldings([]);
             return;
           }
-          throw new Error("Failed to load latest snapshot");
+          throw new Error("Failed to load portfolio");
         }
 
         const latest: LatestSnapshotResponse = await snapshotRes.json();
@@ -119,10 +116,13 @@ export default function InsightsPage() {
           const cached: DetailedInsightApiResponse = await cachedRes.json();
           setInsight(cached.insight);
         } else if (cachedRes.status !== 404) {
-          throw new Error("Failed to load cached deep analysis");
+          throw new Error("Failed to load deep analysis");
         }
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : "Failed to load insights page");
+        const message =
+          loadError instanceof Error ? loadError.message : "Failed to load insights page";
+        setError(message);
+        toast.error(message);
       } finally {
         setIsLoadingSnapshot(false);
       }
@@ -148,6 +148,7 @@ export default function InsightsPage() {
   async function handleGenerateDeepAnalysis() {
     if (snapshotId === null) {
       setError("No snapshot found. Upload a portfolio first.");
+      toast.error("No snapshot found. Upload a portfolio first.");
       return;
     }
 
@@ -163,24 +164,30 @@ export default function InsightsPage() {
 
       const payload: unknown = await response.json();
       if (!response.ok) {
-        throw new Error(
+        const message =
           typeof payload === "object" && payload !== null && "error" in payload
             ? String(payload.error)
-            : "Failed to generate deep analysis",
-        );
+            : "Insight generation failed";
+        throw new Error(message);
       }
 
       const data = payload as DetailedInsightApiResponse;
       setInsight(data.insight);
+      toast.success("Deep analysis generated");
     } catch (generationError) {
-      setError(
+      const message =
         generationError instanceof Error
           ? generationError.message
-          : "Failed to generate deep analysis",
-      );
+          : "Insight generation failed";
+      setError(message);
+      toast.error(message);
     } finally {
       setIsGenerating(false);
     }
+  }
+
+  function openImportModal() {
+    window.dispatchEvent(new Event("wealthos:open-import"));
   }
 
   const healthTone =
@@ -202,33 +209,61 @@ export default function InsightsPage() {
   const progressOffset = circumference - (healthScore.score / 100) * circumference;
 
   if (isLoadingSnapshot) {
-    return <div className="py-12 text-sm text-muted-foreground">Loading insights...</div>;
+    return (
+      <div className="animate-in fade-in-0 duration-300 grid gap-4 py-2">
+        <div className="h-7 w-48 animate-pulse rounded bg-muted" />
+        <div className="h-4 w-72 animate-pulse rounded bg-muted" />
+        <div className="h-64 w-full animate-pulse rounded bg-muted" />
+        <div className="h-64 w-full animate-pulse rounded bg-muted" />
+      </div>
+    );
   }
 
   if (snapshotId === null) {
     return (
-      <div className="flex flex-col gap-3 py-10">
-        <h1 className="font-heading text-2xl font-semibold">Insights</h1>
-        <p className="text-sm text-muted-foreground">No snapshot found yet. Upload a portfolio to generate insights.</p>
+      <div className="animate-in fade-in-0 duration-300 flex flex-col gap-5 py-2">
+        <div className="flex flex-col gap-1 border-b pb-4">
+          <h1 className="font-heading text-2xl font-semibold tracking-tight">Insights</h1>
+          <p className="mt-1 text-sm text-muted-foreground">AI-backed deep portfolio analysis</p>
+        </div>
+
+        <Card className="border border-dashed">
+          <CardContent className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+            <div className="grid size-14 place-items-center rounded-full bg-muted">
+              <Upload className="size-7 text-muted-foreground" aria-hidden="true" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-xl font-semibold tracking-tight">No portfolio yet</h3>
+              <p className="text-sm text-muted-foreground">
+                Upload your first Kite CSV to get started
+              </p>
+            </div>
+            <Button onClick={openImportModal}>Upload CSV</Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-0">
+    <div className="animate-in fade-in-0 duration-300 flex flex-col gap-0">
       {/* Page Header */}
       <div className="mb-8 flex flex-col gap-4 border-b border-border pb-6">
         <div className="flex items-start justify-between gap-6">
 
           <div className="flex-1">
-            <h1 className="font-heading text-3xl font-light tracking-tight">Portfolio Analysis</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
+            <h1 className="font-heading text-2xl font-semibold tracking-tight">Insights</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
               Deterministic financial insights powered by AI interpretation
             </p>
           </div>
           <Button onClick={handleGenerateDeepAnalysis} disabled={isGenerating} size="sm">
             <Sparkles className="size-4" aria-hidden="true" />
-            {isGenerating ? "Analyzing..." : "Regenerate Report"}
+            {isGenerating
+              ? "Generating..."
+              : insight === null
+                ? "Generate Deep Analysis"
+                : "Regenerate Deep Analysis"}
           </Button>
         </div>
 
@@ -243,8 +278,31 @@ export default function InsightsPage() {
         </div>
       )}
 
+      {insight === null && (
+        <Card className="mb-12 border border-dashed">
+          <CardContent className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+            <div className="grid size-14 place-items-center rounded-full bg-muted">
+              <Sparkles className="size-7 text-muted-foreground" aria-hidden="true" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-xl font-semibold tracking-tight">No deep analysis yet</h2>
+              <p className="text-sm text-muted-foreground">
+                Generate your first deep report to see detailed recommendations.
+              </p>
+            </div>
+            <Button onClick={handleGenerateDeepAnalysis} disabled={isGenerating}>
+              <Sparkles className="size-4" aria-hidden="true" />
+              {isGenerating ? "Generating..." : "Generate Deep Analysis"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {insight !== null && (
+        <>
+
       {/* Portfolio Story */}
-      {insight?.portfolioStory && (
+      {insight.portfolioStory && (
         <blockquote className="mb-12 border-l-4 border-primary pl-6 py-2 text-lg font-light leading-relaxed text-foreground">
           {insight.portfolioStory}
         </blockquote>
@@ -316,7 +374,7 @@ export default function InsightsPage() {
 
         {/* Commentary */}
         <div className="mt-8 rounded-lg bg-muted/40 p-4 text-sm leading-relaxed text-foreground">
-          {insight?.healthcommentary ??
+          {insight.healthcommentary ??
             "Generate report to see AI insights on portfolio health drivers and improvement opportunities."}
         </div>
       </section>
@@ -347,10 +405,8 @@ export default function InsightsPage() {
             if (!hovered) return null;
             // Calculate left offset for tooltip center
             let left = 0;
-            let found = false;
             for (const s of sectors) {
               if (s.sector === hoveredSector) {
-                found = true;
                 left += (s.allocationPct / 2);
                 break;
               }
@@ -382,7 +438,7 @@ export default function InsightsPage() {
                 <span className="font-mono text-sm text-muted-foreground">{percentFormatter.format(sector.allocationPct)}%</span>
               </div>
               <p className="text-sm text-muted-foreground">
-                {insight?.sectorCommentary?.[sector.sector] ?? "No AI commentary available for this sector yet."}
+                {insight.sectorCommentary?.[sector.sector] ?? "No AI commentary available for this sector yet."}
               </p>
             </div>
           ))}
@@ -497,9 +553,11 @@ export default function InsightsPage() {
         <SectionHeading label={sectionOrder[5]} />
 
         <blockquote className="rounded-xl border border-border bg-muted/40 p-8 text-base font-light leading-relaxed italic text-foreground">
-          {insight?.riskProfile ?? "Generate report to understand the investor profile reflected by this portfolio."}
+          {insight.riskProfile ?? "Generate report to understand the investor profile reflected by this portfolio."}
         </blockquote>
       </section>
+      </>
+      )}
     </div>
   );
 }

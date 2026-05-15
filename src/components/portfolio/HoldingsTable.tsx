@@ -15,6 +15,8 @@ import type { Holding } from "@/types/portfolio";
 
 interface HoldingsTableProps {
   holdings: Holding[];
+  isLoading?: boolean;
+  skeletonRows?: number;
 }
 
 type SortColumn = "currentValue" | "unrealisedGain" | "allocationPct" | null;
@@ -30,7 +32,11 @@ const numberFormatter = new Intl.NumberFormat("en-IN", {
   maximumFractionDigits: 2,
 });
 
-export function HoldingsTable({ holdings }: HoldingsTableProps) {
+export function HoldingsTable({
+  holdings,
+  isLoading = false,
+  skeletonRows = 8,
+}: HoldingsTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortColumn, setSortColumn] = useState<SortColumn>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -105,78 +111,89 @@ export function HoldingsTable({ holdings }: HoldingsTableProps) {
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
         className="max-w-sm"
+        disabled={isLoading}
       />
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Symbol</TableHead>
-            <TableHead className="text-right">Qty</TableHead>
-            <TableHead className="text-right">Avg Cost</TableHead>
-            <TableHead className="text-right">LTP</TableHead>
-            <TableHead
-              className="cursor-pointer select-none text-right hover:bg-muted"
-              onClick={() => handleColumnSort("currentValue")}
-            >
-              Current Value{getSortIndicator("currentValue")}
-            </TableHead>
-            <TableHead
-              className="cursor-pointer select-none text-right hover:bg-muted"
-              onClick={() => handleColumnSort("unrealisedGain")}
-            >
-              P&amp;L (₹){getSortIndicator("unrealisedGain")}
-            </TableHead>
-            <TableHead className="text-right">P&amp;L (%)</TableHead>
-            <TableHead
-              className="cursor-pointer select-none text-right hover:bg-muted"
-              onClick={() => handleColumnSort("allocationPct")}
-            >
-              Allocation %{getSortIndicator("allocationPct")}
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {filteredAndSortedHoldings.map((holding) => (
-            <TableRow key={holding.symbol}>
-              <TableCell className="font-medium">{holding.symbol}</TableCell>
-              <TableCell className="text-right">
-                {numberFormatter.format(holding.quantity)}
-              </TableCell>
-              <TableCell className="text-right">
-                {rupeeFormatter.format(holding.avgCost)}
-              </TableCell>
-              <TableCell className="text-right">
-                {rupeeFormatter.format(holding.currentPrice)}
-              </TableCell>
-              <TableCell className="text-right">
-                {rupeeFormatter.format(holding.currentValue)}
-              </TableCell>
-              <TableCell
-                className={cn(
-                  "text-right font-medium",
-                  holding.unrealisedGain >= 0
-                    ? "text-emerald-700"
-                    : "text-red-700",
-                )}
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Symbol</TableHead>
+              <TableHead className="text-right">Qty</TableHead>
+              <TableHead className="text-right">Avg Cost</TableHead>
+              <TableHead className="text-right">LTP</TableHead>
+              <TableHead
+                className="cursor-pointer select-none text-right hover:bg-muted"
+                onClick={() => handleColumnSort("currentValue")}
               >
-                {rupeeFormatter.format(holding.unrealisedGain)}
-              </TableCell>
-              <TableCell
-                className={cn(
-                  "text-right font-medium",
-                  holding.unrealisedGain >= 0
-                    ? "text-emerald-700"
-                    : "text-red-700",
-                )}
+                Current Value{getSortIndicator("currentValue")}
+              </TableHead>
+              <TableHead
+                className="cursor-pointer select-none text-right hover:bg-muted"
+                onClick={() => handleColumnSort("unrealisedGain")}
               >
-                {numberFormatter.format(holding.unrealisedGainPct)}%
-              </TableCell>
-              <TableCell className="text-right">
-                {numberFormatter.format(holding.allocationPct)}%
-              </TableCell>
+                P&amp;L (₹){getSortIndicator("unrealisedGain")}
+              </TableHead>
+              <TableHead className="text-right">P&amp;L (%)</TableHead>
+              <TableHead
+                className="cursor-pointer select-none text-right hover:bg-muted"
+                onClick={() => handleColumnSort("allocationPct")}
+              >
+                Allocation %{getSortIndicator("allocationPct")}
+              </TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {isLoading
+              ? Array.from({ length: skeletonRows }, (_, index) => (
+                  <TableRow key={`skeleton-${index}`}>
+                    <TableCell colSpan={8}>
+                      <div className="h-5 w-full animate-pulse rounded bg-muted" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              : filteredAndSortedHoldings.map((holding) => (
+                  <TableRow key={holding.symbol}>
+                    <TableCell className="font-medium">{holding.symbol}</TableCell>
+                    <TableCell className="text-right">
+                      {numberFormatter.format(holding.quantity)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {rupeeFormatter.format(holding.avgCost)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {rupeeFormatter.format(holding.currentPrice)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {rupeeFormatter.format(holding.currentValue)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right font-medium",
+                        holding.unrealisedGain >= 0
+                          ? "text-emerald-700"
+                          : "text-red-700",
+                      )}
+                    >
+                      {rupeeFormatter.format(holding.unrealisedGain)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right font-medium",
+                        holding.unrealisedGain >= 0
+                          ? "text-emerald-700"
+                          : "text-red-700",
+                      )}
+                    >
+                      {numberFormatter.format(holding.unrealisedGainPct)}%
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {numberFormatter.format(holding.allocationPct)}%
+                    </TableCell>
+                  </TableRow>
+                ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

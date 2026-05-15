@@ -2,6 +2,7 @@
 
 import { ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { HoldingsTable } from "@/components/portfolio/HoldingsTable";
 import { Badge } from "@/components/ui/badge";
@@ -119,7 +120,10 @@ export default function TimelinePage() {
         const data: AllSnapshotsResponse = await response.json();
         setSnapshots(data.snapshots);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to fetch snapshots");
+        const message =
+          err instanceof Error ? err.message : "Failed to fetch snapshots";
+        setError(message);
+        toast.error(message || "Failed to load timeline");
       } finally {
         setIsLoading(false);
       }
@@ -130,8 +134,14 @@ export default function TimelinePage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <p className="text-muted-foreground">Loading timeline...</p>
+      <div className="animate-in fade-in-0 duration-300 grid gap-4 py-4">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="rounded-xl border border-border/70 bg-card/60 p-4">
+            <div className="mb-3 h-4 w-40 animate-pulse rounded bg-muted" />
+            <div className="mb-2 h-4 w-2/3 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
+          </div>
+        ))}
       </div>
     );
   }
@@ -153,10 +163,10 @@ export default function TimelinePage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="animate-in fade-in-0 duration-300 flex flex-col gap-5">
       <div className="flex flex-col gap-1 border-b pb-4">
         <h1 className="font-heading text-2xl font-semibold tracking-tight">Timeline</h1>
-        <p className="text-sm text-muted-foreground">Portfolio snapshots and changes</p>
+        <p className="mt-1 text-sm text-muted-foreground">Portfolio snapshots and changes</p>
       </div>
 
       <div className="relative ml-2 border-l border-border/70 pl-6">
@@ -166,11 +176,6 @@ export default function TimelinePage() {
           const isExpanded = expandedSnapshotId === snapshot.id;
           const valueDelta = previous ? snapshot.totalValue - previous.totalValue : null;
           const gainTone = snapshot.totalGain >= 0 ? "text-emerald-700" : "text-red-700";
-          const valueDeltaTone = valueDelta === null || valueDelta === 0
-            ? "text-muted-foreground"
-            : valueDelta > 0
-              ? "text-emerald-700"
-              : "text-red-700";
           const pills = getSnapshotPills(snapshot, previous);
 
           return (

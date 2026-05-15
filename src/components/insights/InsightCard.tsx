@@ -20,6 +20,17 @@ export function InsightCard({
 }: InsightCardProps) {
   const generatedLabel = formatGeneratedAt(insight?.generatedAt);
 
+  if (isGenerating && insight === null) {
+    return (
+      <div className="space-y-3">
+        <div className="h-4 w-28 animate-pulse rounded bg-muted" />
+        <div className="h-4 w-full animate-pulse rounded bg-muted" />
+        <div className="h-4 w-11/12 animate-pulse rounded bg-muted" />
+        <div className="h-4 w-10/12 animate-pulse rounded bg-muted" />
+      </div>
+    );
+  }
+
   return (
     <>
       {/* Summary */}
@@ -94,9 +105,14 @@ export function InsightCard({
       {/* Empty state */}
       {!insight && hasHoldings && (
         <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
-          <div className="text-sm text-muted-foreground">
-            No insights generated yet. Click the button to analyze your portfolio.
-          </div>
+          <div className="text-sm text-muted-foreground">No insights generated yet.</div>
+          <button
+            type="button"
+            onClick={onGenerateInsights}
+            className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
+          >
+            Generate portfolio insights
+          </button>
         </div>
       )}
     </>

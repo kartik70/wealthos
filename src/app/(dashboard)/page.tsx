@@ -1,7 +1,8 @@
 "use client";
 
 import { Upload, Sparkles } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { AllocationChart } from "@/components/dashboard/AllocationChart";
 import { HoldingsTable } from "@/components/portfolio/HoldingsTable";
@@ -14,8 +15,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { Holding, PortfolioTotals, InsightResponse } from "@/types/portfolio";
 
@@ -24,7 +23,6 @@ interface UploadResponse {
   totals: PortfolioTotals;
   holdings: Holding[];
   persisted?: boolean;
-  warning?: string;
 }
 
 interface LatestSnapshotResponse {
@@ -47,52 +45,68 @@ const percentFormatter = new Intl.NumberFormat("en-IN", {
 });
 
 export default function DashboardPage() {
-  const [file, setFile] = useState<File | null>(null);
-  const [source, setSource] = useState<"kite" | "groww">("kite");
-  const [reportDate, setReportDate] = useState<string>(() => {
-    const today = new Date();
-    return today.toISOString().split("T")[0];
-  });
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [warning, setWarning] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [snapshotSource, setSnapshotSource] = useState<"kite" | "groww">("kite");
   const [insight, setInsight] = useState<InsightResponse | null>(null);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
   const [insightError, setInsightError] = useState<string | null>(null);
 
-  // Fetch the latest snapshot on component mount
-  useEffect(() => {
-    async function fetchLatestSnapshot() {
-      try {
-        const response = await fetch("/api/snapshots/latest");
-        if (response.ok) {
-          const data: LatestSnapshotResponse = await response.json();
-          setUploadResult({
-            snapshotId: data.snapshotId,
-            totals: data.totals,
-            holdings: data.holdings,
-            persisted: true,
-          });
-          setSnapshotSource(data.source);
-          setSource(data.source);
-          // If a saved insight exists for this snapshot, display it immediately
-          if (data.insight) {
-            setInsight(data.insight);
-          }
-        }
-        // If no snapshot exists (404), that's fine - show empty state
-      } catch (err) {
-        console.error("Failed to fetch latest snapshot:", err);
-      } finally {
-        setIsLoading(false);
+  const fetchLatestSnapshot = useCallback(async () => {
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("/api/snapshots/latest");
+
+      if (response.status === 404) {
+        setUploadResult(null);
+        setInsight(null);
+        return;
       }
+
+      const payload: unknown = await response.json();
+
+      if (!response.ok) {
+        const message = getErrorMessage(payload) || "Failed to load portfolio";
+        toast.error(message);
+        return;
+      }
+
+      if (!isLatestSnapshotResponse(payload)) {
+        toast.error("Failed to load portfolio");
+        return;
+      }
+
+      setUploadResult({
+        snapshotId: payload.snapshotId,
+        totals: payload.totals,
+        holdings: payload.holdings,
+        persisted: true,
+      });
+      setSnapshotSource(payload.source);
+      setInsight(payload.insight ?? null);
+    } catch {
+      toast.error("Failed to load portfolio");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const frameId = window.requestAnimationFrame(() => {
+      void fetchLatestSnapshot();
+    });
+
+    function handleSnapshotUpdated() {
+      void fetchLatestSnapshot();
     }
 
-    fetchLatestSnapshot();
-  }, []);
+    window.addEventListener("wealthos:snapshot-updated", handleSnapshotUpdated);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("wealthos:snapshot-updated", handleSnapshotUpdated);
+    };
+  }, [fetchLatestSnapshot]);
 
   const totals = uploadResult?.totals;
   const hasHoldings = uploadResult !== null && uploadResult.holdings.length > 0;
@@ -112,54 +126,10 @@ export default function DashboardPage() {
     return uploadResult.holdings.filter((holding) => holding.unrealisedGain < 0).length;
   }, [uploadResult]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (file === null) {
-      setError("Select a CSV file before uploading.");
-      return;
-    }
-
-    setIsUploading(true);
-    setError(null);
-    setWarning(null);
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("source", source);
-    formData.append("reportDate", reportDate);
-
-    try {
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-      });
-      const payload: unknown = await response.json();
-
-      if (!response.ok) {
-        setError(getErrorMessage(payload));
-        return;
-      }
-
-      if (!isUploadResponse(payload)) {
-        setError("Upload succeeded, but the response was not in the expected shape.");
-        return;
-      }
-
-      setUploadResult(payload);
-      setWarning(payload.warning ?? null);
-    } catch (uploadError) {
-      setError(
-        uploadError instanceof Error ? uploadError.message : "Upload failed.",
-      );
-    } finally {
-      setIsUploading(false);
-    }
-  }
-
   async function handleGenerateInsights() {
     if (uploadResult?.snapshotId === null || uploadResult?.snapshotId === undefined) {
       setInsightError("No snapshot available. Please upload a CSV first.");
+      toast.error("No snapshot available. Please upload a CSV first.");
       return;
     }
 
@@ -185,11 +155,13 @@ export default function DashboardPage() {
             ? payload.error
             : "Failed to generate insights";
         setInsightError(errorMsg);
+        toast.error(errorMsg || "Insight generation failed");
         return;
       }
 
       if (!isInsightResponse(payload)) {
         setInsightError("Invalid insight response format");
+        toast.error("Insight generation failed");
         return;
       }
 
@@ -198,29 +170,50 @@ export default function DashboardPage() {
       setInsightError(
         err instanceof Error ? err.message : "Failed to generate insights",
       );
+      toast.error("Insight generation failed");
     } finally {
       setIsGeneratingInsight(false);
     }
   }
 
+  function openImportModal() {
+    window.dispatchEvent(new Event("wealthos:open-import"));
+  }
+
+  const showEmptyState = !isLoading && uploadResult === null;
+
   return (
-    <div className="flex flex-col gap-5">
+    <div className="animate-in fade-in-0 duration-300 flex flex-col gap-5">
       <div className="flex flex-col gap-1 border-b pb-4">
         <h1 className="font-heading text-2xl font-semibold tracking-tight">
           Dashboard
         </h1>
-        <p className="text-sm text-muted-foreground">Portfolio snapshot</p>
+        <p className="mt-1 text-sm text-muted-foreground">Portfolio snapshot</p>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total Value"
-          value={totals === undefined ? "--" : rupeeFormatter.format(totals.totalValue)}
+          value={
+            isLoading
+              ? "--"
+              : totals === undefined
+                ? "--"
+                : rupeeFormatter.format(totals.totalValue)
+          }
+          isLoading={isLoading}
         />
         <StatCard
           label="Total Gain/Loss"
-          value={totals === undefined ? "--" : rupeeFormatter.format(totals.totalGain)}
+          value={
+            isLoading
+              ? "--"
+              : totals === undefined
+                ? "--"
+                : rupeeFormatter.format(totals.totalGain)
+          }
           valueClassName={totals === undefined ? undefined : gainTone}
+          isLoading={isLoading}
         />
         <StatCard
           label="Gain %"
@@ -230,15 +223,33 @@ export default function DashboardPage() {
               : `${percentFormatter.format(totals.totalGainPct)}%`
           }
           valueClassName={totals === undefined ? undefined : gainTone}
+          isLoading={isLoading}
         />
         <StatCard
           label="Holdings in Loss"
           value={uploadResult === null ? "--" : String(holdingsInLoss)}
           valueClassName={uploadResult === null ? undefined : "text-red-700"}
+          isLoading={isLoading}
         />
       </div>
 
-      {/* AI Insights Section - moved to top */}
+      {showEmptyState && (
+        <Card className="border border-dashed">
+          <CardContent className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+            <div className="grid size-14 place-items-center rounded-full bg-muted">
+              <Upload className="size-7 text-muted-foreground" aria-hidden="true" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-xl font-semibold tracking-tight">No portfolio yet</h3>
+              <p className="text-sm text-muted-foreground">
+                Upload your first Kite CSV to get started
+              </p>
+            </div>
+            <Button onClick={openImportModal}>Upload CSV</Button>
+          </CardContent>
+        </Card>
+      )}
+
       {hasHoldings && uploadResult !== null && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-4">
@@ -263,69 +274,14 @@ export default function DashboardPage() {
               isGenerating={isGeneratingInsight}
               hasHoldings={hasHoldings}
             />
+            {insightError !== null && (
+              <p className="mt-3 text-sm text-destructive">{insightError}</p>
+            )}
           </CardContent>
         </Card>
       )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Upload</CardTitle>
-            <CardDescription>Kite CSV snapshot import</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="grid gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="portfolio-csv">CSV file</Label>
-                <Input
-                  id="portfolio-csv"
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="file:mr-3 file:rounded-md file:bg-muted file:px-2"
-                  onChange={(event) => {
-                    setFile(event.target.files?.[0] ?? null);
-                  }}
-                />
-              </div>
-
-              <div className="grid gap-2 sm:max-w-48">
-                <Label htmlFor="source">Source</Label>
-                <select
-                  id="source"
-                  value={source}
-                  onChange={(event) => {
-                    setSource(event.target.value === "groww" ? "groww" : "kite");
-                  }}
-                  className="h-8 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                >
-                  <option value="kite">Kite</option>
-                  <option value="groww">Groww</option>
-                </select>
-              </div>
-
-              <div className="grid gap-2 sm:max-w-48">
-                <Label htmlFor="report-date">Report date</Label>
-                <Input
-                  id="report-date"
-                  type="date"
-                  value={reportDate}
-                  onChange={(event) => {
-                    setReportDate(event.target.value);
-                  }}
-                  className="h-8"
-                />
-              </div>
-
-              <div>
-                <Button type="submit" disabled={isUploading}>
-                  <Upload className="size-4" aria-hidden="true" />
-                  {isUploading ? "Uploading" : "Upload"}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader>
             <CardTitle>Snapshot</CardTitle>
@@ -358,31 +314,6 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {error !== null && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
-      {warning !== null && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {warning}
-        </div>
-      )}
-
-      {!isLoading && uploadResult === null && (
-        <Card className="border border-dashed">
-          <CardContent className="flex flex-col items-center justify-center gap-4 py-12">
-            <div className="text-center">
-              <h3 className="font-semibold">No portfolio data yet</h3>
-              <p className="text-sm text-muted-foreground">
-                Upload your first CSV file to get started
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {hasHoldings && uploadResult !== null && (
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.8fr)]">
           <Card>
@@ -390,7 +321,7 @@ export default function DashboardPage() {
               <CardTitle>Holdings</CardTitle>
             </CardHeader>
             <CardContent>
-              <HoldingsTable holdings={uploadResult.holdings} />
+              <HoldingsTable holdings={uploadResult.holdings} isLoading={isLoading} />
             </CardContent>
           </Card>
 
@@ -399,7 +330,33 @@ export default function DashboardPage() {
               <CardTitle>Allocation</CardTitle>
             </CardHeader>
             <CardContent>
-              <AllocationChart holdings={uploadResult.holdings} />
+              {isLoading ? (
+                <div className="h-64 w-full animate-pulse rounded bg-muted" />
+              ) : (
+                <AllocationChart holdings={uploadResult.holdings} />
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.8fr)]">
+          <Card>
+            <CardHeader>
+              <CardTitle>Holdings</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <HoldingsTable holdings={[]} isLoading skeletonRows={8} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Allocation</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64 w-full animate-pulse rounded bg-muted" />
             </CardContent>
           </Card>
         </div>
@@ -412,10 +369,12 @@ function StatCard({
   label,
   value,
   valueClassName,
+  isLoading,
 }: {
   label: string;
   value: string;
   valueClassName?: string;
+  isLoading?: boolean;
 }) {
   return (
     <Card size="sm">
@@ -423,9 +382,13 @@ function StatCard({
         <CardTitle className="text-xs text-muted-foreground">{label}</CardTitle>
       </CardHeader>
       <CardContent className="pt-1">
-        <div className={cn("text-lg font-semibold tracking-tight", valueClassName)}>
-          {value}
-        </div>
+        {isLoading ? (
+          <div className="h-7 w-2/3 animate-pulse rounded bg-muted" />
+        ) : (
+          <div className={cn("text-lg font-semibold tracking-tight", valueClassName)}>
+            {value}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -442,20 +405,6 @@ function getErrorMessage(payload: unknown): string {
   }
 
   return "Upload failed.";
-}
-
-function isUploadResponse(value: unknown): value is UploadResponse {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
-  const candidate = value as Partial<UploadResponse>;
-
-  return (
-    (typeof candidate.snapshotId === "string" || candidate.snapshotId === null) &&
-    isPortfolioTotals(candidate.totals) &&
-    Array.isArray(candidate.holdings)
-  );
 }
 
 function isPortfolioTotals(value: unknown): value is PortfolioTotals {
@@ -485,5 +434,21 @@ function isInsightResponse(value: unknown): value is InsightResponse {
     Array.isArray(candidate.recommendations) &&
     Array.isArray(candidate.alerts) &&
     typeof candidate.generatedAt === "string"
+  );
+}
+
+function isLatestSnapshotResponse(value: unknown): value is LatestSnapshotResponse {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<LatestSnapshotResponse>;
+
+  return (
+    typeof candidate.snapshotId === "string" &&
+    isPortfolioTotals(candidate.totals) &&
+    Array.isArray(candidate.holdings) &&
+    (candidate.source === "kite" || candidate.source === "groww") &&
+    typeof candidate.createdAt === "string"
   );
 }

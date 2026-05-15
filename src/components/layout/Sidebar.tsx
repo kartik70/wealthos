@@ -1,9 +1,10 @@
 "use client";
 
 import {
-  BarChart3,
   BriefcaseBusiness,
+  CloudUpload,
   Gauge,
+  Landmark,
   Lightbulb,
   Settings,
   Timeline,
@@ -12,6 +13,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ComponentType, SVGProps } from "react";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -28,19 +30,38 @@ const navItems: NavItem[] = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  onImportCsv: () => void;
+  onNavigate?: () => void;
+}
+
+export function Sidebar({ onImportCsv, onNavigate }: SidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="flex h-screen w-60 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
-      <div className="flex h-14 items-center border-b px-5">
-        <div className="flex items-center gap-2 font-heading text-base font-semibold">
-          <BarChart3 className="size-5" aria-hidden="true" />
-          <span>WealthOS</span>
+    <aside className="flex h-full w-64 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
+      <div className="flex h-16 items-center border-b px-5">
+        <div className="flex items-center gap-2.5">
+          <div className="grid size-8 place-items-center rounded-md bg-foreground text-background">
+            <Landmark className="size-4" aria-hidden="true" />
+          </div>
+          <div>
+            <p className="font-heading text-base font-semibold tracking-tight">WealthOS</p>
+            <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
+              Portfolio Intelligence
+            </p>
+          </div>
         </div>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1 px-2.5 py-3">
+      <div className="px-2.5 py-3">
+        <Button className="w-full justify-start" onClick={onImportCsv}>
+          <CloudUpload className="size-4" aria-hidden="true" />
+          Import CSV
+        </Button>
+      </div>
+
+      <nav className="flex flex-1 flex-col gap-1 px-2.5 py-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive =
@@ -50,10 +71,12 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={onNavigate}
               className={cn(
-                "flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                isActive &&
-                  "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm hover:bg-sidebar-primary hover:text-sidebar-primary-foreground",
+                "flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
               )}
             >
               <Icon className="size-4" aria-hidden="true" />
@@ -62,6 +85,18 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      <div className="border-t p-3">
+        <div className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-2.5 py-2">
+          <div className="grid size-8 place-items-center rounded-full bg-foreground text-xs font-semibold text-background">
+            RD
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-foreground">Redeye</p>
+            <p className="truncate text-xs text-muted-foreground">Investor</p>
+          </div>
+        </div>
+      </div>
     </aside>
   );
 }
