@@ -26,7 +26,7 @@ export async function POST(request: Request): Promise<Response> {
     const formData = await request.formData();
     const source = readSource(formData);
     const file = readCsvFile(formData);
-    const reportDate = readReportDate(formData);
+    const reportDateInput = readReportDate(formData);
     const csvString = await file.text();
     const parsedHoldings = parseKiteCSV(csvString);
 
@@ -42,18 +42,17 @@ export async function POST(request: Request): Promise<Response> {
     const supabase = await createSupabaseServerClient();
     const userId = "local-dev-user";
 
-    // Check if a snapshot already exists for the same date
-    const startOfDay = new Date(reportDate);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(reportDate);
-    endOfDay.setHours(23, 59, 59, 999);
+    // When checking for duplicate date, compare in IST.
+    const reportDate = new Date(formData.get("reportDate") as string);
+    const dateStr = reportDate.toISOString().split("T")[0];
 
-    const { data: existingSnapshots, error: checkError } = await supabase
+    const { data: existing, error: checkError } = await supabase
       .from("portfolio_snapshots")
       .select("id")
       .eq("user_id", userId)
-      .gte("created_at", startOfDay.toISOString())
-      .lt("created_at", endOfDay.toISOString());
+      .gte("created_at", `${dateStr}T00:00:00+05:30`)
+      .lt("created_at", `${dateStr}T23:59:59+05:30`)
+      .maybeSingle();
 
     if (checkError !== null) {
       return Response.json(
@@ -62,19 +61,60 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    if (existingSnapshots && existingSnapshots.length > 0) {
-      const formatter = new Intl.DateTimeFormat("en-IN", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
-      const existingDate = formatter.format(new Date(reportDate));
-      return Response.json(
-        {
-          error: `A snapshot for ${existingDate} already exists. Please choose a different date.`,
-        },
-        { status: 400 },
-      );
+    if (existing !== null) {
+      const shouldReplace = formData.get("replace") === "true";
+
+      if (!shouldReplace) {
+        const formatter = new Intl.DateTimeFormat("en-IN", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+        const existingDate = formatter.format(new Date(reportDate));
+        return Response.json(
+          {
+            error: `A snapshot for ${existingDate} already exists. Please choose a different date.`,
+          },
+          { status: 400 },
+        );
+      }
+
+      // Delete the existing snapshot's holdings and ai_insights
+      const { error: holdingsDeleteError } = await supabase
+        .from("holdings")
+        .delete()
+        .eq("snapshot_id", existing.id);
+
+      if (holdingsDeleteError !== null) {
+        return Response.json(
+          { error: `Failed to delete existing holdings: ${holdingsDeleteError.message}` },
+          { status: 500 },
+        );
+      }
+
+      const { error: insightsDeleteError } = await supabase
+        .from("ai_insights")
+        .delete()
+        .eq("snapshot_id", existing.id);
+
+      if (insightsDeleteError !== null) {
+        return Response.json(
+          { error: `Failed to delete existing insights: ${insightsDeleteError.message}` },
+          { status: 500 },
+        );
+      }
+
+      const { error: snapshotDeleteError } = await supabase
+        .from("portfolio_snapshots")
+        .delete()
+        .eq("id", existing.id);
+
+      if (snapshotDeleteError !== null) {
+        return Response.json(
+          { error: `Failed to delete existing snapshot: ${snapshotDeleteError.message}` },
+          { status: 500 },
+        );
+      }
     }
 
     const snapshotInsert: SnapshotInsert = {
@@ -84,7 +124,7 @@ export async function POST(request: Request): Promise<Response> {
       total_gain: totals.totalGain,
       total_gain_pct: totals.totalGainPct,
       source,
-      created_at: new Date(reportDate).toISOString(),
+      created_at: new Date(reportDateInput).toISOString(),
       raw_data: null,
     };
     const { data: snapshot, error: snapshotError } = await supabase

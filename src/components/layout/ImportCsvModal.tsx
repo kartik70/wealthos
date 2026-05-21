@@ -18,6 +18,11 @@ interface ImportCsvModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
+interface ReplaceConfirmation {
+  date: string;
+  formData: FormData;
+}
+
 export function ImportCsvModal({ open, onOpenChange }: ImportCsvModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [source, setSource] = useState<"kite" | "groww">("kite");
@@ -26,9 +31,48 @@ export function ImportCsvModal({ open, onOpenChange }: ImportCsvModalProps) {
     return today.toISOString().split("T")[0];
   });
   const [isUploading, setIsUploading] = useState(false);
+  const [replaceConfirmation, setReplaceConfirmation] = useState<ReplaceConfirmation | null>(null);
 
-  if (!open) {
+  if (!open && replaceConfirmation === null) {
     return null;
+  }
+
+  if (replaceConfirmation !== null) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <button
+          type="button"
+          className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+          onClick={handleReplaceCancel}
+          aria-label="Close confirmation"
+        />
+
+        <div className="relative z-10 w-full max-w-md rounded-xl border bg-card p-6 shadow-xl">
+          <h2 className="text-lg font-semibold tracking-tight">Replace snapshot?</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            A snapshot for <span className="font-medium text-foreground">{replaceConfirmation.date}</span> already exists. Replace it with this file?
+          </p>
+
+          <div className="mt-6 flex gap-3 justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleReplaceCancel}
+              disabled={isUploading}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleReplaceConfirm}
+              disabled={isUploading}
+            >
+              {isUploading ? "Replacing..." : "Replace"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -45,6 +89,14 @@ export function ImportCsvModal({ open, onOpenChange }: ImportCsvModalProps) {
     formData.append("file", file);
     formData.append("source", source);
     formData.append("reportDate", reportDate);
+
+    await uploadPortfolio(formData, false);
+  }
+
+  async function uploadPortfolio(formData: FormData, replace: boolean) {
+    if (replace) {
+      formData.append("replace", "true");
+    }
 
     try {
       const response = await fetch("/api/upload", {
@@ -63,12 +115,27 @@ export function ImportCsvModal({ open, onOpenChange }: ImportCsvModalProps) {
             ? payload.error
             : "Upload failed";
 
+        // Check if this is a duplicate date error
+        if (message.includes("already exists") && !replace) {
+          // Extract the date from the error message
+          const dateMatch = message.match(/for\s+(\d+\s+\w+\s+\d+)/);
+          const displayDate = dateMatch ? dateMatch[1] : "this date";
+          setReplaceConfirmation({
+            date: displayDate,
+            formData,
+          });
+          setIsUploading(false);
+          return;
+        }
+
         toast.error(message);
+        setIsUploading(false);
         return;
       }
 
       if (!isUploadResponse(payload)) {
         toast.error("Upload succeeded but response format was invalid");
+        setIsUploading(false);
         return;
       }
 
@@ -85,6 +152,21 @@ export function ImportCsvModal({ open, onOpenChange }: ImportCsvModalProps) {
     } finally {
       setIsUploading(false);
     }
+  }
+
+  function handleReplaceConfirm() {
+    if (replaceConfirmation === null) {
+      return;
+    }
+
+    setReplaceConfirmation(null);
+    setIsUploading(true);
+    uploadPortfolio(replaceConfirmation.formData, true);
+  }
+
+  function handleReplaceCancel() {
+    setReplaceConfirmation(null);
+    setIsUploading(false);
   }
 
   return (
