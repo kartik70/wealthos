@@ -2,11 +2,13 @@
 
 import {
   BriefcaseBusiness,
+  BotMessageSquare,
   CloudUpload,
   Gauge,
   Landmark,
   Lightbulb,
   Settings,
+  Target,
   Timeline,
 } from "lucide-react";
 import Link from "next/link";
@@ -27,6 +29,8 @@ const navItems: NavItem[] = [
   { href: "/portfolio", label: "Portfolio", icon: BriefcaseBusiness },
   { href: "/insights", label: "Insights", icon: Lightbulb },
   { href: "/timeline", label: "Timeline", icon: Timeline },
+  { href: "/goals", label: "Goals", icon: Target },
+  { href: "/advisor", label: "Advisor", icon: BotMessageSquare },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

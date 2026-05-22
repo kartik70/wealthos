@@ -1,0 +1,328 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+import { createSupabaseAdminClient } from "../../../../lib/db/supabase";
+import { retrieveRelevantContext } from "../../../../lib/ai/retrieval";
+import { buildAdvisorSystemPrompt } from "../../../../features/ai/advisorPromptBuilder";
+import type { PortfolioSnapshot } from "../../../../types/portfolio";
+import type { HoldingRow, PortfolioSnapshotRow } from "../../../../types/db";
+import { isAIProvider, type AIProvider } from "../../../../lib/ai/provider";
+
+export const runtime = "nodejs";
+
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+}
+
+interface ChatRequest {
+  message: string;
+  conversationHistory: Message[];
+}
+
+type ConversationInsert = {
+  user_id: string;
+  role: "user" | "assistant";
+  content: string;
+};
+
+const RATE_LIMIT_MAX_MESSAGES = 20;
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const advisorRateLimit = new Map<string, { count: number; windowStart: number }>();
+
+const ADVISOR_SYSTEM_PROMPT = `Guardrails:
+- If the user asks anything unrelated to their portfolio, investing, or personal finance, respond in one short sentence and redirect to what WealthOS can analyze from their portfolio data.
+- Only answer using data from the retrieved context and current snapshot. If the data to answer a question is not in the context, say so explicitly. Never make up stock prices, dates, or portfolio values.
+- When data needed to answer is missing from context, keep the reply short and direct: state what data is missing and suggest uploading older CSVs from the Timeline page. Do not provide a bulleted list of workaround steps.
+- Do not use moralising or lecture-style caveats. Keep refusals and limitations brief, then redirect to actionable portfolio analysis the system can provide.`;
+
+function getProvider(): AIProvider {
+  const configured = process.env.AI_PROVIDER;
+  if (isAIProvider(configured)) return configured;
+  return "anthropic";
+}
+
+export async function POST(request: Request): Promise<Response> {
+  let body: ChatRequest;
+  try {
+    body = (await request.json()) as ChatRequest;
+  } catch {
+    return Response.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const { message, conversationHistory } = body;
+
+  if (typeof message !== "string") {
+    return Response.json({ error: "message is required" }, { status: 400 });
+  }
+
+  const sanitizedMessage = stripHtmlAndScriptTags(message).trim();
+
+  if (sanitizedMessage === "") {
+    return Response.json({ error: "message is required" }, { status: 400 });
+  }
+
+  if (sanitizedMessage.length > 500) {
+    return Response.json(
+      { error: "message must be 500 characters or less" },
+      { status: 400 },
+    );
+  }
+
+  const userId = "local-dev-user";
+
+  if (isRateLimited(userId)) {
+    return Response.json(
+      { error: "Too many requests, please wait before sending more messages" },
+      { status: 429 },
+    );
+  }
+
+  const provider = getProvider();
+
+  const [retrievedContext, currentSnapshot] = await Promise.all([
+    retrieveRelevantContext(sanitizedMessage, userId, 5),
+    fetchCurrentSnapshot(userId),
+  ]);
+
+  const systemPrompt = buildGuardrailedSystemPrompt(retrievedContext, currentSnapshot);
+
+  const retrievedChunksCount = retrievedContext === "No portfolio history available." ||
+    retrievedContext === "No relevant portfolio history found."
+    ? 0
+    : retrievedContext.split("---").length;
+
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        // Send metadata first
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ type: "meta", retrievedChunks: retrievedChunksCount, provider })}\n\n`,
+          ),
+        );
+
+        const assistantResponse = provider === "gemini"
+          ? await streamGemini(systemPrompt, conversationHistory, sanitizedMessage, controller, encoder)
+          : await streamAnthropic(systemPrompt, conversationHistory, sanitizedMessage, controller, encoder);
+
+        await saveConversationTurn(userId, sanitizedMessage, assistantResponse);
+
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
+      } catch (err) {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ type: "error", error: err instanceof Error ? err.message : "Unknown error" })}\n\n`,
+          ),
+        );
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+}
+
+function buildGuardrailedSystemPrompt(
+  retrievedContext: string,
+  currentSnapshot: PortfolioSnapshot | null,
+): string {
+  const basePrompt = buildAdvisorSystemPrompt(retrievedContext, currentSnapshot);
+  return `${basePrompt}\n\n${ADVISOR_SYSTEM_PROMPT}`;
+}
+
+function stripHtmlAndScriptTags(input: string): string {
+  return input
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function isRateLimited(userId: string): boolean {
+  const now = Date.now();
+  const current = advisorRateLimit.get(userId);
+
+  if (current === undefined || now - current.windowStart >= RATE_LIMIT_WINDOW_MS) {
+    advisorRateLimit.set(userId, { count: 1, windowStart: now });
+    return false;
+  }
+
+  if (current.count >= RATE_LIMIT_MAX_MESSAGES) {
+    return true;
+  }
+
+  advisorRateLimit.set(userId, {
+    count: current.count + 1,
+    windowStart: current.windowStart,
+  });
+  return false;
+}
+
+async function streamAnthropic(
+  systemPrompt: string,
+  conversationHistory: Message[],
+  userMessage: string,
+  controller: ReadableStreamDefaultController,
+  encoder: TextEncoder,
+): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (apiKey === undefined || apiKey.trim() === "") {
+    throw new Error("Missing ANTHROPIC_API_KEY");
+  }
+
+  const historyWindow = conversationHistory.slice(-10);
+  const client = new Anthropic({ apiKey });
+  const messages: Anthropic.MessageParam[] = [
+    ...historyWindow.map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
+    { role: "user", content: userMessage },
+  ];
+
+  const stream = client.messages.stream({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 800,
+    system: systemPrompt,
+    messages,
+  });
+
+  let fullText = "";
+
+  for await (const chunk of stream) {
+    if (
+      chunk.type === "content_block_delta" &&
+      chunk.delta.type === "text_delta"
+    ) {
+      fullText += chunk.delta.text;
+      controller.enqueue(
+        encoder.encode(
+          `data: ${JSON.stringify({ type: "delta", text: chunk.delta.text })}\n\n`,
+        ),
+      );
+    }
+  }
+
+  return fullText;
+}
+
+async function streamGemini(
+  systemPrompt: string,
+  conversationHistory: Message[],
+  userMessage: string,
+  controller: ReadableStreamDefaultController,
+  encoder: TextEncoder,
+): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (apiKey === undefined || apiKey.trim() === "") {
+    throw new Error("Missing GEMINI_API_KEY");
+  }
+
+  const gemini = new GoogleGenerativeAI(apiKey);
+  const model = gemini.getGenerativeModel({
+    model: "gemini-2.0-flash",
+    systemInstruction: systemPrompt,
+  });
+
+  const history = conversationHistory.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  const chat = model.startChat({ history });
+  const result = await chat.sendMessageStream(userMessage);
+  let fullText = "";
+
+  for await (const chunk of result.stream) {
+    const text = chunk.text();
+    if (text) {
+      fullText += text;
+      controller.enqueue(
+        encoder.encode(`data: ${JSON.stringify({ type: "delta", text })}\n\n`),
+      );
+    }
+  }
+
+  return fullText;
+}
+
+async function saveConversationTurn(
+  userId: string,
+  userMessage: string,
+  assistantResponse: string,
+): Promise<void> {
+  const supabase = createSupabaseAdminClient();
+  const rows: ConversationInsert[] = [
+    {
+      user_id: userId,
+      role: "user",
+      content: userMessage,
+    },
+    {
+      user_id: userId,
+      role: "assistant",
+      content: assistantResponse,
+    },
+  ];
+
+  const { error } = await supabase.from("advisor_conversations").insert(rows);
+
+  if (error !== null) {
+    throw new Error(`Failed to persist advisor conversation: ${error.message}`);
+  }
+}
+
+async function fetchCurrentSnapshot(userId: string): Promise<PortfolioSnapshot | null> {
+  const supabase = createSupabaseAdminClient();
+
+  const { data: snapshotRow } = await supabase
+    .from("portfolio_snapshots")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (snapshotRow === null) return null;
+
+  const { data: holdingRows } = await supabase
+    .from("holdings")
+    .select("*")
+    .eq("snapshot_id", snapshotRow.id);
+
+  return rowToSnapshot(snapshotRow, holdingRows ?? []);
+}
+
+function rowToSnapshot(row: PortfolioSnapshotRow, holdingRows: HoldingRow[]): PortfolioSnapshot {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    createdAt: row.created_at,
+    totalValue: row.total_value,
+    totalCost: row.total_cost,
+    totalGain: row.total_gain,
+    totalGainPct: row.total_gain_pct,
+    holdings: holdingRows.map((h) => ({
+      symbol: h.symbol,
+      name: h.name ?? h.symbol,
+      quantity: h.quantity,
+      avgCost: h.avg_cost,
+      currentPrice: h.current_price,
+      currentValue: h.current_value,
+      unrealisedGain: h.unrealised_gain,
+      unrealisedGainPct: h.unrealised_gain_pct,
+      allocationPct: h.allocation_pct,
+    })),
+    source: (row.source as PortfolioSnapshot["source"]) ?? "manual",
+  };
+}

@@ -4,6 +4,7 @@ import {
   calcPortfolioTotals,
 } from "../../../lib/finance/calculations";
 import { parseKiteCSV } from "../../../lib/parsers/kite";
+import { embedSnapshot } from "../../../lib/ai/embeddings";
 import type { Database } from "../../../types/db";
 
 export const runtime = "nodejs";
@@ -169,6 +170,22 @@ export async function POST(request: Request): Promise<Response> {
         { status: 500 },
       );
     }
+
+    // Fire-and-forget embedding — do not block the upload response
+    const snapshotForEmbed = {
+      id: snapshot.id,
+      userId,
+      createdAt: snapshotInsert.created_at ?? new Date().toISOString(),
+      totalValue: totals.totalValue,
+      totalCost: totals.totalCost,
+      totalGain: totals.totalGain,
+      totalGainPct: totals.totalGainPct,
+      holdings,
+      source,
+    } as const;
+    embedSnapshot(snapshotForEmbed, holdings).catch((err: unknown) => {
+      console.error("embedSnapshot failed silently:", err);
+    });
 
     return Response.json(
       {

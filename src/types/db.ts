@@ -43,6 +43,34 @@ export type AiInsightRow = {
   trigger: "manual" | "cron" | "upload" | null;
 };
 
+export type SnapshotEmbeddingRow = {
+  id: string;
+  snapshot_id: string;
+  user_id: string;
+  chunk_type: "snapshot_summary" | "diff_summary" | "insight_summary";
+  content: string;
+  embedding: number[];
+  created_at: string;
+};
+
+export type AdvisorConversationRow = {
+  id: string;
+  user_id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+};
+
+export type GoalRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  target_corpus: number;
+  target_date: string;
+  expected_return: number;
+  created_at: string;
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -70,6 +98,33 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<AiInsightRow>;
+        Relationships: [];
+      };
+      snapshot_embeddings: {
+        Row: SnapshotEmbeddingRow;
+        Insert: Omit<SnapshotEmbeddingRow, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<SnapshotEmbeddingRow>;
+        Relationships: [];
+      };
+      advisor_conversations: {
+        Row: AdvisorConversationRow;
+        Insert: Omit<AdvisorConversationRow, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<AdvisorConversationRow>;
+        Relationships: [];
+      };
+      goals: {
+        Row: GoalRow;
+        Insert: Omit<GoalRow, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<GoalRow>;
         Relationships: [];
       };
     };
