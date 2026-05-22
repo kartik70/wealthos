@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { getStoredAIProvider } from "@/lib/ai/provider";
 import { cn } from "@/lib/utils";
 import type { Holding, PortfolioTotals, InsightResponse } from "@/types/portfolio";
 
@@ -138,10 +139,11 @@ export default function DashboardPage() {
     setInsight(null);
 
     try {
+      const provider = getStoredAIProvider() ?? undefined;
       const response = await fetch("/api/insights", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ snapshotId: uploadResult.snapshotId }),
+        body: JSON.stringify({ snapshotId: uploadResult.snapshotId, provider }),
       });
 
       const payload: unknown = await response.json();

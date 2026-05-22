@@ -5,7 +5,9 @@ import { calcHealthScore } from "@/lib/finance/health";
 import { classifySectors } from "@/lib/finance/sectors";
 import { calcTaxSummary } from "@/lib/finance/tax";
 import { buildDetailedInsightPrompt } from "@/features/ai/promptBuilder";
+import { isAIProvider } from "@/lib/ai/provider";
 import type { Database, Json } from "@/types/db";
+import type { AIProvider } from "@/lib/ai/provider";
 import type { DetailedInsightResponse, Holding, PortfolioSnapshot } from "@/types/portfolio";
 
 export const runtime = "nodejs";
@@ -18,6 +20,7 @@ type AiInsightRow = Database["public"]["Tables"]["ai_insights"]["Row"];
 
 interface DetailedInsightRequestBody {
   snapshotId: string;
+  provider?: AIProvider;
 }
 
 interface DetailedInsightResponseBody {
@@ -144,7 +147,7 @@ export async function POST(request: Request): Promise<Response> {
       taxSummary,
     );
 
-    const insight = await generateDetailedInsight(prompt);
+    const insight = await generateDetailedInsight(prompt, body.provider);
 
     const { error: insertError } = await supabase.from("ai_insights").insert({
       snapshot_id: snapshot.id,
@@ -221,12 +224,16 @@ async function readRequestBody(request: Request): Promise<unknown> {
 }
 
 function isDetailedInsightRequestBody(value: unknown): value is DetailedInsightRequestBody {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<DetailedInsightRequestBody>;
+
   return (
-    typeof value === "object" &&
-    value !== null &&
-    "snapshotId" in value &&
-    typeof value.snapshotId === "string" &&
-    value.snapshotId.trim() !== ""
+    typeof candidate.snapshotId === "string" &&
+    candidate.snapshotId.trim() !== "" &&
+    (candidate.provider === undefined || isAIProvider(candidate.provider))
   );
 }
 

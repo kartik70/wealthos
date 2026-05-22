@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { getStoredAIProvider } from "@/lib/ai/provider";
 import { calcHealthScore } from "@/lib/finance/health";
 import { classifySectors } from "@/lib/finance/sectors";
 import { calcTaxSummary } from "@/lib/finance/tax";
@@ -156,10 +157,11 @@ export default function InsightsPage() {
     setError(null);
 
     try {
+      const provider = getStoredAIProvider() ?? undefined;
       const response = await fetch("/api/insights/detailed", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ snapshotId }),
+        body: JSON.stringify({ snapshotId, provider }),
       });
 
       const payload: unknown = await response.json();

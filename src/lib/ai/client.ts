@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { TextBlock } from "@anthropic-ai/sdk/resources/messages";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 import type {
   Alert,
@@ -9,6 +10,7 @@ import type {
   InsightResponse,
   Recommendation,
 } from "../../types/portfolio";
+import { type AIProvider, isAIProvider } from "./provider";
 
 const INSIGHT_RESPONSE_SCHEMA = {
   type: "object",
@@ -47,41 +49,65 @@ const INSIGHT_RESPONSE_SCHEMA = {
   },
 } as const;
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+let anthropicClient: Anthropic | null = null;
+let geminiClient: GoogleGenerativeAI | null = null;
 
-export async function generateInsight(prompt: string): Promise<InsightResponse> {
-  const response = await client.messages.create({
-  model: "claude-sonnet-4-20250514",
-  max_tokens: 1000,
-  messages: [{ role: "user", content: prompt }],
-});
-
-  const text = response.content
-    .filter((block): block is TextBlock => block.type === "text")
-    .map((block) => block.text)
-    .join("")
-    .trim();
-
-  if (text === "") {
-    throw new Error("Claude returned an empty insight response");
-  }
-  const clean = text
-  .replace(/^```json\s*/i, "")
-  .replace(/^```\s*/i, "")
-  .replace(/```\s*$/i, "")
-  .trim();
-
-return parseInsightResponse(clean);
+export async function generateInsight(
+  prompt: string,
+  provider: AIProvider = getDefaultAIProvider(),
+): Promise<InsightResponse> {
+  const text = await generateText(prompt, provider, 1000);
+  return parseInsightResponse(stripCodeFences(text));
 }
 
 export async function generateDetailedInsight(
   prompt: string,
+  provider: AIProvider = getDefaultAIProvider(),
 ): Promise<DetailedInsightResponse> {
-  const response = await client.messages.create({
+  const text = await generateText(prompt, provider, 4000);
+  return parseDetailedInsightResponse(stripCodeFences(text));
+}
+
+function getDefaultAIProvider(): AIProvider {
+  const configured = process.env.AI_PROVIDER;
+
+  if (configured === undefined || configured.trim() === "") {
+    return "anthropic";
+  }
+
+  if (!isAIProvider(configured)) {
+    throw new Error('Invalid AI_PROVIDER. Expected "anthropic" or "gemini"');
+  }
+
+  return configured;
+}
+
+async function generateText(
+  prompt: string,
+  provider: AIProvider,
+  maxTokens: number,
+): Promise<string> {
+  if (provider === "gemini") {
+    return generateWithGemini(prompt, maxTokens);
+  }
+
+  return generateWithAnthropic(prompt, maxTokens);
+}
+
+async function generateWithAnthropic(prompt: string, maxTokens: number): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+
+  if (apiKey === undefined || apiKey.trim() === "") {
+    throw new Error("Missing ANTHROPIC_API_KEY");
+  }
+
+  if (anthropicClient === null) {
+    anthropicClient = new Anthropic({ apiKey });
+  }
+
+  const response = await anthropicClient.messages.create({
     model: "claude-sonnet-4-20250514",
-    max_tokens: 4000,
+    max_tokens: maxTokens,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -92,16 +118,46 @@ export async function generateDetailedInsight(
     .trim();
 
   if (text === "") {
-    throw new Error("Claude returned an empty detailed insight response");
+    throw new Error("Anthropic returned an empty response");
   }
 
-  const clean = text
+  return text;
+}
+
+async function generateWithGemini(prompt: string, maxTokens: number): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (apiKey === undefined || apiKey.trim() === "") {
+    throw new Error("Missing GEMINI_API_KEY");
+  }
+
+  if (geminiClient === null) {
+    geminiClient = new GoogleGenerativeAI(apiKey);
+  }
+
+  const model = geminiClient.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const response = await model.generateContent({
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    generationConfig: {
+      maxOutputTokens: maxTokens,
+    },
+  });
+
+  const text = response.response.text().trim();
+
+  if (text === "") {
+    throw new Error("Gemini returned an empty response");
+  }
+
+  return text;
+}
+
+function stripCodeFences(text: string): string {
+  return text
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
     .replace(/```\s*$/i, "")
     .trim();
-
-  return parseDetailedInsightResponse(clean);
 }
 
 export function parseInsightResponse(responseText: string): InsightResponse {
@@ -259,3 +315,5 @@ function isAlertType(value: unknown): value is Alert["type"] {
 function isUrgency(value: unknown): value is Alert["urgency"] {
   return value === "INFO" || value === "WARNING" || value === "ACTION_NEEDED";
 }
+
+export type { AIProvider };
