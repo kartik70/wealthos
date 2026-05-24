@@ -1,3 +1,24 @@
+export interface MutualFundHolding {
+  schemeName: string;
+  amc: string;
+  category: string;
+  subCategory: string;
+  folioNo: string;
+  units: number;
+  investedValue: number;
+  currentValue: number;
+  returns: number;
+  returnsPct: number;
+  allocationPct: number;
+}
+
+export interface MutualFundTotals {
+  totalInvested: number;
+  totalCurrentValue: number;
+  totalReturns: number;
+  totalReturnsPct: number;
+}
+
 export interface Holding {
   symbol: string;
   name: string;

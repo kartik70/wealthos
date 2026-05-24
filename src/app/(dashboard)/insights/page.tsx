@@ -31,9 +31,11 @@ import type {
 } from "@/types/portfolio";
 
 interface LatestSnapshotResponse {
-  snapshotId: string;
-  holdings: Holding[];
-  createdAt: string;
+  equity: {
+    snapshotId: string;
+    holdings: Holding[];
+    createdAt: string;
+  } | null;
 }
 
 interface DetailedInsightApiResponse {
@@ -105,12 +107,18 @@ export default function InsightsPage() {
         }
 
         const latest: LatestSnapshotResponse = await snapshotRes.json();
-        setSnapshotId(latest.snapshotId);
-        setHoldings(latest.holdings);
-        setSnapshotDate(latest.createdAt);
+        if (latest.equity === null) {
+          setSnapshotId(null);
+          setHoldings([]);
+          return;
+        }
+
+        setSnapshotId(latest.equity.snapshotId);
+        setHoldings(latest.equity.holdings);
+        setSnapshotDate(latest.equity.createdAt);
 
         const cachedRes = await fetch(
-          `/api/insights/detailed?snapshotId=${encodeURIComponent(latest.snapshotId)}`,
+          `/api/insights/detailed?snapshotId=${encodeURIComponent(latest.equity.snapshotId)}`,
         );
 
         if (cachedRes.ok) {

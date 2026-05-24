@@ -3,7 +3,7 @@
 import { Menu, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { ImportCsvModal } from "@/components/layout/ImportCsvModal";
+import { ImportPortfolioModal } from "@/components/layout/ImportPortfolioModal";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -30,7 +30,7 @@ export default function DashboardLayout({
   return (
     <div className="flex h-screen overflow-hidden bg-muted/30">
       <aside className="hidden h-screen shrink-0 lg:block">
-        <Sidebar onImportCsv={() => setIsImportModalOpen(true)} />
+        <Sidebar onImportPortfolio={() => setIsImportModalOpen(true)} />
       </aside>
 
       <div
@@ -55,7 +55,7 @@ export default function DashboardLayout({
           )}
         >
           <Sidebar
-            onImportCsv={() => {
+            onImportPortfolio={() => {
               setIsImportModalOpen(true);
               setIsSidebarOpen(false);
             }}
@@ -84,7 +84,7 @@ export default function DashboardLayout({
             size="sm"
             onClick={() => setIsImportModalOpen(true)}
           >
-            Import CSV
+            Import
           </Button>
         </div>
 
@@ -93,7 +93,7 @@ export default function DashboardLayout({
         </div>
       </main>
 
-      <ImportCsvModal
+      <ImportPortfolioModal
         open={isImportModalOpen}
         onOpenChange={setIsImportModalOpen}
       />

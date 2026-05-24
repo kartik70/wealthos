@@ -2,15 +2,38 @@ import type {
   HealthScoreResult,
   Holding,
   HoldingConcentration,
+  MutualFundHolding,
+  MutualFundTotals,
   PortfolioSnapshot,
   SectorAllocation,
   TaxSummary,
 } from "@/types/portfolio";
 
+export function buildMutualFundPromptSection(
+  mfTotals: MutualFundTotals,
+  mfHoldings: MutualFundHolding[],
+): string {
+  const topFunds = [...mfHoldings]
+    .sort((left, right) => right.allocationPct - left.allocationPct)
+    .slice(0, 3)
+    .map(
+      (holding) =>
+        `${holding.schemeName} (${holding.allocationPct.toFixed(1)}%)`,
+    )
+    .join(", ");
+
+  return `Mutual funds summary:
+- Total MF value: ₹${mfTotals.totalCurrentValue.toFixed(2)}
+- Total MF returns: ₹${mfTotals.totalReturns.toFixed(2)} (${mfTotals.totalReturnsPct >= 0 ? "+" : ""}${mfTotals.totalReturnsPct.toFixed(2)}%)
+- Top 3 funds by allocation: ${topFunds || "none"}`;
+}
+
 export function buildPortfolioPrompt(
   snapshot: PortfolioSnapshot,
   concentration: HoldingConcentration[],
   holdings: Holding[],
+  mfTotals?: MutualFundTotals,
+  mfHoldings?: MutualFundHolding[],
 ): string {
   const concentrationText = concentration
     .map(
@@ -38,6 +61,11 @@ ${holdingsText}
 
 Concentration Analysis:
 ${concentrationText}
+${
+  mfTotals !== undefined && mfHoldings !== undefined && mfHoldings.length > 0
+    ? `\n${buildMutualFundPromptSection(mfTotals, mfHoldings)}\n`
+    : ""
+}
 
 Based on this analysis, provide:
 

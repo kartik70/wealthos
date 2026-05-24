@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 import { createSupabaseAdminClient } from "../db/supabase";
 import type { Holding, PortfolioSnapshot } from "../../types/portfolio";
+import type { MutualFundHoldingRow } from "../../types/db";
 import type { SnapshotDiff } from "../finance/diff";
 import type { Database } from "../../types/db";
 
@@ -57,7 +58,13 @@ export async function embedSnapshot(
     day: "numeric",
   });
 
-  const snapshotSummaryText = `On ${date}, portfolio value was ₹${snapshot.totalValue.toFixed(0)}, total gain/loss ₹${snapshot.totalGain.toFixed(0)} (${snapshot.totalGainPct >= 0 ? "+" : ""}${snapshot.totalGainPct.toFixed(2)}%). Holdings: ${holdingsSummary}`;
+  const mfSentence = await buildMutualFundEmbeddingSentence(
+    supabase,
+    snapshot.userId,
+    snapshot.createdAt,
+  );
+
+  const snapshotSummaryText = `On ${date}, portfolio value was ₹${snapshot.totalValue.toFixed(0)}, total gain/loss ₹${snapshot.totalGain.toFixed(0)} (${snapshot.totalGainPct >= 0 ? "+" : ""}${snapshot.totalGainPct.toFixed(2)}%). Holdings: ${holdingsSummary}${mfSentence}`;
 
   const snapshotEmbedding = await generateEmbedding(snapshotSummaryText);
   rows.push({
@@ -137,4 +144,62 @@ export async function embedSnapshot(
   if (error !== null) {
     throw new Error(`Failed to save snapshot embeddings: ${error.message}`);
   }
+}
+
+async function buildMutualFundEmbeddingSentence(
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string,
+  equityCreatedAt: string,
+): Promise<string> {
+  const snapshotDate = equityCreatedAt.split("T")[0];
+  if (snapshotDate === undefined || snapshotDate === "") {
+    return "";
+  }
+
+  const { data: mfSnapshot, error } = await supabase
+    .from("mutual_fund_snapshots")
+    .select(
+      `
+      snapshot_date,
+      total_current_value,
+      total_returns,
+      total_returns_pct,
+      mutual_fund_holdings (
+        scheme_name,
+        allocation_pct
+      )
+    `,
+    )
+    .eq("user_id", userId)
+    .eq("snapshot_date", snapshotDate)
+    .maybeSingle();
+
+  if (error !== null || mfSnapshot === null) {
+    return "";
+  }
+
+  const snapshotData = mfSnapshot as unknown as {
+    snapshot_date: string;
+    total_current_value: number;
+    total_returns: number;
+    total_returns_pct: number;
+    mutual_fund_holdings: Array<Pick<MutualFundHoldingRow, "scheme_name" | "allocation_pct">>;
+  };
+
+  const topFunds = [...(snapshotData.mutual_fund_holdings ?? [])]
+    .sort((left, right) => (right.allocation_pct ?? 0) - (left.allocation_pct ?? 0))
+    .slice(0, 3)
+    .map(
+      (holding) =>
+        `${holding.scheme_name} (${(holding.allocation_pct ?? 0).toFixed(1)}%)`,
+    )
+    .join(", ");
+
+  const formattedDate = new Date(snapshotData.snapshot_date).toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  return ` Mutual funds on ${formattedDate}: total value ₹${snapshotData.total_current_value.toFixed(0)}, returns ₹${snapshotData.total_returns.toFixed(0)} (${snapshotData.total_returns_pct >= 0 ? "+" : ""}${snapshotData.total_returns_pct.toFixed(2)}%). Top funds: ${topFunds || "none"}.`;
 }

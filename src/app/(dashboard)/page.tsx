@@ -6,8 +6,10 @@ import { toast } from "sonner";
 
 import { AllocationChart } from "@/components/dashboard/AllocationChart";
 import { HoldingsTable } from "@/components/portfolio/HoldingsTable";
+import { MutualFundHoldingsTable } from "@/components/portfolio/MutualFundHoldingsTable";
 import { InsightCard } from "@/components/insights/InsightCard";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
   CardContent,
@@ -16,23 +18,37 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { withAIProviderHeaders } from "@/lib/ai/provider";
+import type { CombinedPortfolioResult } from "@/lib/finance/combined";
 import { cn } from "@/lib/utils";
-import type { Holding, PortfolioTotals, InsightResponse } from "@/types/portfolio";
+import type {
+  Holding,
+  InsightResponse,
+  MutualFundHolding,
+  MutualFundTotals,
+  PortfolioTotals,
+} from "@/types/portfolio";
 
-interface UploadResponse {
-  snapshotId: string | null;
-  totals: PortfolioTotals;
-  holdings: Holding[];
-  persisted?: boolean;
-}
-
-interface LatestSnapshotResponse {
+interface LatestEquitySnapshot {
   snapshotId: string;
   totals: PortfolioTotals;
   holdings: Holding[];
   source: "kite" | "groww";
   createdAt: string;
   insight?: InsightResponse;
+}
+
+interface LatestMutualFundSnapshot {
+  snapshotId: string;
+  snapshotDate: string;
+  totals: MutualFundTotals;
+  holdings: MutualFundHolding[];
+  createdAt: string;
+}
+
+interface LatestSnapshotResponse {
+  equity: LatestEquitySnapshot | null;
+  mutualFund: LatestMutualFundSnapshot | null;
+  combined: CombinedPortfolioResult | null;
 }
 
 const rupeeFormatter = new Intl.NumberFormat("en-IN", {
@@ -46,9 +62,12 @@ const percentFormatter = new Intl.NumberFormat("en-IN", {
 });
 
 export default function DashboardPage() {
-  const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
+  const [equitySnapshot, setEquitySnapshot] = useState<LatestEquitySnapshot | null>(null);
+  const [mutualFundSnapshot, setMutualFundSnapshot] =
+    useState<LatestMutualFundSnapshot | null>(null);
+  const [combinedPortfolio, setCombinedPortfolio] =
+    useState<CombinedPortfolioResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [snapshotSource, setSnapshotSource] = useState<"kite" | "groww">("kite");
   const [insight, setInsight] = useState<InsightResponse | null>(null);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
   const [insightError, setInsightError] = useState<string | null>(null);
@@ -60,7 +79,9 @@ export default function DashboardPage() {
       const response = await fetch("/api/snapshots/latest");
 
       if (response.status === 404) {
-        setUploadResult(null);
+        setEquitySnapshot(null);
+        setMutualFundSnapshot(null);
+        setCombinedPortfolio(null);
         setInsight(null);
         return;
       }
@@ -78,14 +99,10 @@ export default function DashboardPage() {
         return;
       }
 
-      setUploadResult({
-        snapshotId: payload.snapshotId,
-        totals: payload.totals,
-        holdings: payload.holdings,
-        persisted: true,
-      });
-      setSnapshotSource(payload.source);
-      setInsight(payload.insight ?? null);
+      setEquitySnapshot(payload.equity);
+      setMutualFundSnapshot(payload.mutualFund);
+      setCombinedPortfolio(payload.combined);
+      setInsight(payload.equity?.insight ?? null);
     } catch {
       toast.error("Failed to load portfolio");
     } finally {
@@ -109,26 +126,40 @@ export default function DashboardPage() {
     };
   }, [fetchLatestSnapshot]);
 
-  const totals = uploadResult?.totals;
-  const hasHoldings = uploadResult !== null && uploadResult.holdings.length > 0;
-  const gainTone = useMemo(() => {
-    if (uploadResult === null) {
+  const equityTotals = equitySnapshot?.totals;
+  const mfTotals = mutualFundSnapshot?.totals;
+  const hasEquityHoldings =
+    equitySnapshot !== null && equitySnapshot.holdings.length > 0;
+  const hasMutualFundHoldings =
+    mutualFundSnapshot !== null && mutualFundSnapshot.holdings.length > 0;
+  const hasAnyHoldings = hasEquityHoldings || hasMutualFundHoldings;
+
+  const equityGainTone = useMemo(() => {
+    if (equityTotals === undefined) {
       return "text-foreground";
     }
 
-    return uploadResult.totals.totalGain >= 0 ? "text-emerald-700" : "text-red-700";
-  }, [uploadResult]);
+    return equityTotals.totalGain >= 0 ? "text-emerald-700" : "text-red-700";
+  }, [equityTotals]);
+
+  const mfGainTone = useMemo(() => {
+    if (mfTotals === undefined) {
+      return "text-foreground";
+    }
+
+    return mfTotals.totalReturns >= 0 ? "text-emerald-700" : "text-red-700";
+  }, [mfTotals]);
 
   const holdingsInLoss = useMemo(() => {
-    if (uploadResult === null) {
+    if (equitySnapshot === null) {
       return 0;
     }
 
-    return uploadResult.holdings.filter((holding) => holding.unrealisedGain < 0).length;
-  }, [uploadResult]);
+    return equitySnapshot.holdings.filter((holding) => holding.unrealisedGain < 0).length;
+  }, [equitySnapshot]);
 
   async function handleGenerateInsights() {
-    if (uploadResult?.snapshotId === null || uploadResult?.snapshotId === undefined) {
+    if (equitySnapshot?.snapshotId === null || equitySnapshot?.snapshotId === undefined) {
       setInsightError("No snapshot available. Please upload a CSV first.");
       toast.error("No snapshot available. Please upload a CSV first.");
       return;
@@ -142,7 +173,7 @@ export default function DashboardPage() {
       const response = await fetch("/api/insights", {
         method: "POST",
         headers: withAIProviderHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ snapshotId: uploadResult.snapshotId }),
+        body: JSON.stringify({ snapshotId: equitySnapshot.snapshotId }),
       });
 
       const payload: unknown = await response.json();
@@ -181,7 +212,7 @@ export default function DashboardPage() {
     window.dispatchEvent(new Event("wealthos:open-import"));
   }
 
-  const showEmptyState = !isLoading && uploadResult === null;
+  const showEmptyState = !isLoading && !hasAnyHoldings;
 
   return (
     <div className="animate-in fade-in-0 duration-300 flex flex-col gap-5">
@@ -192,66 +223,131 @@ export default function DashboardPage() {
         <p className="mt-1 text-sm text-muted-foreground">Portfolio snapshot</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Total Value"
-          value={
-            isLoading
-              ? "--"
-              : totals === undefined
-                ? "--"
-                : rupeeFormatter.format(totals.totalValue)
-          }
-          isLoading={isLoading}
-        />
-        <StatCard
-          label="Total Gain/Loss"
-          value={
-            isLoading
-              ? "--"
-              : totals === undefined
-                ? "--"
-                : rupeeFormatter.format(totals.totalGain)
-          }
-          valueClassName={totals === undefined ? undefined : gainTone}
-          isLoading={isLoading}
-        />
-        <StatCard
-          label="Gain %"
-          value={
-            totals === undefined
-              ? "--"
-              : `${percentFormatter.format(totals.totalGainPct)}%`
-          }
-          valueClassName={totals === undefined ? undefined : gainTone}
-          isLoading={isLoading}
-        />
-        <StatCard
-          label="Holdings in Loss"
-          value={uploadResult === null ? "--" : String(holdingsInLoss)}
-          valueClassName={uploadResult === null ? undefined : "text-red-700"}
-          isLoading={isLoading}
-        />
-      </div>
-
-      {showEmptyState && (
-        <Card className="border border-dashed">
-          <CardContent className="flex flex-col items-center justify-center gap-4 py-16 text-center">
-            <div className="grid size-14 place-items-center rounded-full bg-muted">
-              <Upload className="size-7 text-muted-foreground" aria-hidden="true" />
-            </div>
-            <div className="space-y-1">
-              <h3 className="text-xl font-semibold tracking-tight">No portfolio yet</h3>
-              <p className="text-sm text-muted-foreground">
-                Upload your first Kite CSV to get started
-              </p>
-            </div>
-            <Button onClick={openImportModal}>Upload CSV</Button>
-          </CardContent>
-        </Card>
+      {(hasEquityHoldings || isLoading) && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Equity (Kite)
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              label="Total Value"
+              value={
+                isLoading
+                  ? "--"
+                  : equityTotals === undefined
+                    ? "--"
+                    : rupeeFormatter.format(equityTotals.totalValue)
+              }
+              isLoading={isLoading}
+            />
+            <StatCard
+              label="Total Gain/Loss"
+              value={
+                isLoading
+                  ? "--"
+                  : equityTotals === undefined
+                    ? "--"
+                    : rupeeFormatter.format(equityTotals.totalGain)
+              }
+              valueClassName={equityTotals === undefined ? undefined : equityGainTone}
+              isLoading={isLoading}
+            />
+            <StatCard
+              label="Gain %"
+              value={
+                equityTotals === undefined
+                  ? "--"
+                  : `${percentFormatter.format(equityTotals.totalGainPct)}%`
+              }
+              valueClassName={equityTotals === undefined ? undefined : equityGainTone}
+              isLoading={isLoading}
+            />
+            <StatCard
+              label="Holdings in Loss"
+              value={equitySnapshot === null ? "--" : String(holdingsInLoss)}
+              valueClassName={equitySnapshot === null ? undefined : "text-red-700"}
+              isLoading={isLoading}
+            />
+          </div>
+        </div>
       )}
 
-      {hasHoldings && uploadResult !== null && (
+      {(hasMutualFundHoldings || (isLoading && !hasEquityHoldings)) && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Mutual funds (Groww)
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <StatCard
+              label="Total MF Value"
+              value={
+                isLoading
+                  ? "--"
+                  : mfTotals === undefined
+                    ? "--"
+                    : rupeeFormatter.format(mfTotals.totalCurrentValue)
+              }
+              isLoading={isLoading}
+            />
+            <StatCard
+              label="MF Returns"
+              value={
+                isLoading
+                  ? "--"
+                  : mfTotals === undefined
+                    ? "--"
+                    : rupeeFormatter.format(mfTotals.totalReturns)
+              }
+              valueClassName={mfTotals === undefined ? undefined : mfGainTone}
+              isLoading={isLoading}
+            />
+            <StatCard
+              label="MF Returns %"
+              value={
+                mfTotals === undefined
+                  ? "--"
+                  : `${percentFormatter.format(mfTotals.totalReturnsPct)}%`
+              }
+              valueClassName={mfTotals === undefined ? undefined : mfGainTone}
+              isLoading={isLoading}
+            />
+          </div>
+        </div>
+      )}
+
+      {combinedPortfolio !== null && hasEquityHoldings && hasMutualFundHoldings ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <StatCard
+            label="Combined portfolio value"
+            value={rupeeFormatter.format(combinedPortfolio.totalValue)}
+          />
+          <StatCard
+            label="Equity vs MF split"
+            value={`${percentFormatter.format(combinedPortfolio.equity.allocationPct)}% / ${percentFormatter.format(combinedPortfolio.mutualFunds.allocationPct)}%`}
+          />
+        </div>
+      ) : null}
+
+      {showEmptyState && (
+        <div className="grid gap-4">
+          <Card className="border border-dashed">
+            <CardContent className="flex flex-col items-center justify-center gap-4 py-12 text-center">
+              <div className="grid size-14 place-items-center rounded-full bg-muted">
+                <Upload className="size-7 text-muted-foreground" aria-hidden="true" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-semibold tracking-tight">No portfolio imported</h3>
+                <p className="text-sm text-muted-foreground">
+                  Import Kite equity holdings or Groww mutual fund holdings to start tracking.
+                </p>
+              </div>
+              <Button onClick={openImportModal}>Import Portfolio</Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {hasEquityHoldings && equitySnapshot !== null && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-4">
             <div>
@@ -273,7 +369,7 @@ export default function DashboardPage() {
               insight={insight}
               onGenerateInsights={handleGenerateInsights}
               isGenerating={isGeneratingInsight}
-              hasHoldings={hasHoldings}
+              hasHoldings={hasEquityHoldings}
             />
             {insightError !== null && (
               <p className="mt-3 text-sm text-destructive">{insightError}</p>
@@ -287,57 +383,72 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle>Snapshot</CardTitle>
             <CardDescription>
-              {uploadResult?.snapshotId ?? "No saved snapshot"}
+              {equitySnapshot?.snapshotId ?? mutualFundSnapshot?.snapshotId ?? "No saved snapshot"}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 text-sm">
             <div className="flex items-center justify-between border-b pb-2">
-              <span className="text-muted-foreground">Source</span>
-              <span className="font-medium capitalize">{snapshotSource}</span>
+              <span className="text-muted-foreground">Equity source</span>
+              <span className="font-medium capitalize">
+                {equitySnapshot?.source ?? "—"}
+              </span>
             </div>
             <div className="flex items-center justify-between border-b pb-2">
-              <span className="text-muted-foreground">Holdings</span>
+              <span className="text-muted-foreground">Equity holdings</span>
               <span className="font-medium">
-                {uploadResult === null ? "--" : uploadResult.holdings.length}
+                {equitySnapshot === null ? "--" : equitySnapshot.holdings.length}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Status</span>
+              <span className="text-muted-foreground">MF holdings</span>
               <span className="font-medium">
-                {uploadResult === null
-                  ? "Ready"
-                  : uploadResult.persisted === false
-                    ? "Preview"
-                    : "Saved"}
+                {mutualFundSnapshot === null ? "--" : mutualFundSnapshot.holdings.length}
               </span>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {hasHoldings && uploadResult !== null && (
+      {hasAnyHoldings && !isLoading && (
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.8fr)]">
           <Card>
             <CardHeader>
               <CardTitle>Holdings</CardTitle>
             </CardHeader>
             <CardContent>
-              <HoldingsTable holdings={uploadResult.holdings} isLoading={isLoading} />
+              <Tabs defaultValue={hasEquityHoldings ? "equity" : "mutual-funds"}>
+                <TabsList>
+                  {hasEquityHoldings ? (
+                    <TabsTrigger value="equity">Equity</TabsTrigger>
+                  ) : null}
+                  {hasMutualFundHoldings ? (
+                    <TabsTrigger value="mutual-funds">Mutual funds</TabsTrigger>
+                  ) : null}
+                </TabsList>
+                {hasEquityHoldings && equitySnapshot !== null ? (
+                  <TabsContent value="equity" className="mt-4">
+                    <HoldingsTable holdings={equitySnapshot.holdings} />
+                  </TabsContent>
+                ) : null}
+                {hasMutualFundHoldings && mutualFundSnapshot !== null ? (
+                  <TabsContent value="mutual-funds" className="mt-4">
+                    <MutualFundHoldingsTable holdings={mutualFundSnapshot.holdings} />
+                  </TabsContent>
+                ) : null}
+              </Tabs>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Allocation</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="h-64 w-full animate-pulse rounded bg-muted" />
-              ) : (
-                <AllocationChart holdings={uploadResult.holdings} />
-              )}
-            </CardContent>
-          </Card>
+          {hasEquityHoldings && equitySnapshot !== null ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Equity allocation</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AllocationChart holdings={equitySnapshot.holdings} />
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
       )}
 
@@ -354,7 +465,7 @@ export default function DashboardPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Allocation</CardTitle>
+              <CardTitle>Equity allocation</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-64 w-full animate-pulse rounded bg-muted" />
@@ -445,11 +556,22 @@ function isLatestSnapshotResponse(value: unknown): value is LatestSnapshotRespon
 
   const candidate = value as Partial<LatestSnapshotResponse>;
 
-  return (
-    typeof candidate.snapshotId === "string" &&
-    isPortfolioTotals(candidate.totals) &&
-    Array.isArray(candidate.holdings) &&
-    (candidate.source === "kite" || candidate.source === "groww") &&
-    typeof candidate.createdAt === "string"
-  );
+  const equityValid =
+    candidate.equity === null ||
+    candidate.equity === undefined ||
+    (typeof candidate.equity.snapshotId === "string" &&
+      isPortfolioTotals(candidate.equity.totals) &&
+      Array.isArray(candidate.equity.holdings) &&
+      (candidate.equity.source === "kite" || candidate.equity.source === "groww") &&
+      typeof candidate.equity.createdAt === "string");
+
+  const mutualFundValid =
+    candidate.mutualFund === null ||
+    candidate.mutualFund === undefined ||
+    (typeof candidate.mutualFund.snapshotId === "string" &&
+      typeof candidate.mutualFund.snapshotDate === "string" &&
+      Array.isArray(candidate.mutualFund.holdings) &&
+      typeof candidate.mutualFund.createdAt === "string");
+
+  return equityValid && mutualFundValid;
 }

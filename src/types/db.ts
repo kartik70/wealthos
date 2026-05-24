@@ -71,6 +71,33 @@ export type GoalRow = {
   created_at: string;
 };
 
+export type MutualFundSnapshotRow = {
+  id: string;
+  user_id: string;
+  created_at: string;
+  snapshot_date: string;
+  total_invested: number;
+  total_current_value: number;
+  total_returns: number;
+  total_returns_pct: number;
+};
+
+export type MutualFundHoldingRow = {
+  id: string;
+  snapshot_id: string;
+  scheme_name: string;
+  amc: string | null;
+  category: string | null;
+  sub_category: string | null;
+  folio_no: string | null;
+  units: number | null;
+  invested_value: number | null;
+  current_value: number | null;
+  returns: number | null;
+  returns_pct: number | null;
+  allocation_pct: number | null;
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -125,6 +152,23 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<GoalRow>;
+        Relationships: [];
+      };
+      mutual_fund_snapshots: {
+        Row: MutualFundSnapshotRow;
+        Insert: Omit<MutualFundSnapshotRow, "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<MutualFundSnapshotRow>;
+        Relationships: [];
+      };
+      mutual_fund_holdings: {
+        Row: MutualFundHoldingRow;
+        Insert: Omit<MutualFundHoldingRow, "id"> & {
+          id?: string;
+        };
+        Update: Partial<MutualFundHoldingRow>;
         Relationships: [];
       };
     };

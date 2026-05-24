@@ -4,9 +4,10 @@ import {
   calcAllocationPct,
   calcPortfolioTotals,
 } from "../../../lib/finance/calculations";
+import { buildMutualFundPromptSection } from "../../../features/ai/promptBuilder";
 import { getAIProviderFromRequest, isAIProvider } from "../../../lib/ai/provider";
-import type { Database, Json } from "../../../types/db";
-import type { Holding } from "../../../types/portfolio";
+import type { Database, Json, MutualFundHoldingRow } from "../../../types/db";
+import type { Holding, MutualFundHolding, MutualFundTotals } from "../../../types/portfolio";
 import type { AIProvider } from "../../../lib/ai/provider";
 
 export const runtime = "nodejs";
@@ -88,7 +89,12 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const metrics = calculatePortfolioMetrics(holdings);
-    const prompt = buildInsightPrompt(snapshot, metrics);
+    const mutualFundContext = await fetchMutualFundContextForDate(
+      supabase,
+      userId,
+      snapshot.created_at,
+    );
+    const prompt = buildInsightPrompt(snapshot, metrics, mutualFundContext);
     const provider = getAIProviderFromRequest(request);
     const insight = await generateInsight(prompt, provider);
     const { error: insertError } = await supabase.from("ai_insights").insert({
@@ -162,9 +168,88 @@ function calculatePortfolioMetrics(holdings: Holding[]): PortfolioMetrics {
   };
 }
 
+async function fetchMutualFundContextForDate(
+  supabase: Awaited<ReturnType<typeof import("@/lib/db/supabase").createSupabaseServerClient>>,
+  userId: string,
+  equityCreatedAt: string,
+): Promise<{ totals: MutualFundTotals; holdings: MutualFundHolding[] } | null> {
+  const snapshotDate = equityCreatedAt.split("T")[0];
+  if (snapshotDate === undefined || snapshotDate === "") {
+    return null;
+  }
+
+  const { data: mfSnapshot, error } = await supabase
+    .from("mutual_fund_snapshots")
+    .select(
+      `
+      total_invested,
+      total_current_value,
+      total_returns,
+      total_returns_pct,
+      mutual_fund_holdings (
+        scheme_name,
+        amc,
+        category,
+        sub_category,
+        folio_no,
+        units,
+        invested_value,
+        current_value,
+        returns,
+        returns_pct,
+        allocation_pct
+      )
+    `,
+    )
+    .eq("user_id", userId)
+    .eq("snapshot_date", snapshotDate)
+    .maybeSingle();
+
+  if (error !== null || mfSnapshot === null) {
+    return null;
+  }
+
+  const snapshotData = mfSnapshot as unknown as {
+    total_invested: number;
+    total_current_value: number;
+    total_returns: number;
+    total_returns_pct: number;
+    mutual_fund_holdings: MutualFundHoldingRow[];
+  };
+
+  const holdings = (snapshotData.mutual_fund_holdings ?? []).map((row) => ({
+    schemeName: row.scheme_name,
+    amc: row.amc ?? "",
+    category: row.category ?? "",
+    subCategory: row.sub_category ?? "",
+    folioNo: row.folio_no ?? "",
+    units: row.units ?? 0,
+    investedValue: row.invested_value ?? 0,
+    currentValue: row.current_value ?? 0,
+    returns: row.returns ?? 0,
+    returnsPct: row.returns_pct ?? 0,
+    allocationPct: row.allocation_pct ?? 0,
+  }));
+
+  if (holdings.length === 0) {
+    return null;
+  }
+
+  return {
+    totals: {
+      totalInvested: snapshotData.total_invested,
+      totalCurrentValue: snapshotData.total_current_value,
+      totalReturns: snapshotData.total_returns,
+      totalReturnsPct: snapshotData.total_returns_pct,
+    },
+    holdings,
+  };
+}
+
 function buildInsightPrompt(
   snapshot: SnapshotRow,
   metrics: PortfolioMetrics,
+  mutualFundContext: { totals: MutualFundTotals; holdings: MutualFundHolding[] } | null,
 ): string {
   const promptPayload = {
     snapshot: {
@@ -173,7 +258,16 @@ function buildInsightPrompt(
       source: snapshot.source,
     },
     metrics,
+    mutualFunds: mutualFundContext,
   };
+
+  const mutualFundSection =
+    mutualFundContext !== null
+      ? `\n\n${buildMutualFundPromptSection(
+          mutualFundContext.totals,
+          mutualFundContext.holdings,
+        )}`
+      : "";
 
   return `You are the interpretation layer for WealthOS, a personal portfolio intelligence product.
 
@@ -199,5 +293,5 @@ Return only valid JSON matching this TypeScript interface:
 Use generatedAt as the current ISO timestamp. Keep the output concise and factual. This is not financial advice and must not predict prices.
 
 Pre-calculated portfolio data:
-${JSON.stringify(promptPayload, null, 2)}`;
+${JSON.stringify(promptPayload, null, 2)}${mutualFundSection}`;
 }

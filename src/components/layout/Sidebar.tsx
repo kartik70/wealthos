@@ -38,7 +38,7 @@ const navItems: NavItem[] = [
 ];
 
 interface SidebarProps {
-  onImportCsv: () => void;
+  onImportPortfolio: () => void;
   onNavigate?: () => void;
 }
 
@@ -57,7 +57,7 @@ function getInitials(email: string | undefined): string {
   return localPart.slice(0, 2).toUpperCase();
 }
 
-export function Sidebar({ onImportCsv, onNavigate }: SidebarProps) {
+export function Sidebar({ onImportPortfolio, onNavigate }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -100,9 +100,9 @@ export function Sidebar({ onImportCsv, onNavigate }: SidebarProps) {
       </div>
 
       <div className="px-2.5 py-3">
-        <Button className="w-full justify-start" onClick={onImportCsv}>
+        <Button className="w-full justify-start" onClick={onImportPortfolio}>
           <CloudUpload className="size-4" aria-hidden="true" />
-          Import CSV
+          Import Portfolio
         </Button>
       </div>
 

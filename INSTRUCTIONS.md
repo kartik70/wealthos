@@ -9,9 +9,10 @@
 WealthOS is a personal AI-powered portfolio intelligence platform. It helps the user understand their investments — not predict markets, not execute trades. Think of it as a smart, private financial journal that gets smarter over time.
 
 **It is:**
-- A portfolio snapshot and diff engine
+- A portfolio snapshot and diff engine (equity via Kite CSV, MF via Groww XLSX)
 - A deterministic financial calculator
 - An AI interpretation and narration layer
+- A RAG-powered advisor chat with full portfolio history
 - A daily alert system for actionable portfolio events
 
 **It is NOT:**
@@ -22,22 +23,29 @@ WealthOS is a personal AI-powered portfolio intelligence platform. It helps the 
 
 ---
 
-## Tech stack (do not deviate without checking INSTRUCTIONS.md first)
+## Tech stack
 
-| Layer | Tool | Why |
+| Layer | Tool | Notes |
 |---|---|---|
-| Framework | Next.js 15 (App Router) | Frontend + API routes in one repo |
-| Language | TypeScript (strict mode) | Type safety everywhere |
-| Styling | Tailwind CSS + shadcn/ui | Fast, consistent UI |
-| State | Zustand | Simple client state |
+| Framework | Next.js 15 (App Router) | Frontend + API routes |
+| Language | TypeScript (strict mode) | No `any` |
+| Styling | Tailwind CSS + shadcn/ui | Nova preset, Slate base |
+| State | Zustand | Client state + chat history |
 | Charts | Recharts | Portfolio visualisation |
-| Database | Supabase (Postgres) | Free tier, auth included |
-| AI | Anthropic SDK (direct) | No LiteLLM, no abstraction layer yet |
+| Database | Supabase (Postgres + pgvector) | Auth included |
+| AI Chat | Anthropic SDK | claude-sonnet-4-20250514 |
+| AI Alt | Google Generative AI SDK | gemini-2.0-flash, user-selectable |
+| Embeddings | Google Generative AI SDK | gemini-embedding-001, always used regardless of chat provider |
+| Markdown | react-markdown | Advisor chat responses only |
+| XLSX parsing | SheetJS (xlsx) | Groww XLSX parser |
+| CSV parsing | papaparse | Kite CSV parser |
 | Email | Resend | Alert delivery |
 | Cron | Vercel Cron Jobs | Daily analysis trigger |
 | Deployment | Vercel | Free tier |
 
-**Do not add new dependencies without a clear reason. Every new package must solve a problem that cannot be solved with what's already here.**
+**AI provider is user-selectable** via Settings page, saved to localStorage as `ai_provider`. Valid values: `anthropic` (default) or `gemini`. Embeddings always use Gemini regardless of this setting.
+
+**Do not add new dependencies without a clear reason.**
 
 ---
 
@@ -45,51 +53,80 @@ WealthOS is a personal AI-powered portfolio intelligence platform. It helps the 
 
 ```
 wealthos/
-├── INSTRUCTIONS.md               ← you are here
-├── docs/                         ← architecture notes, ADRs
+├── INSTRUCTIONS.md
+├── vercel.json                   ← cron config
+├── docs/
 ├── src/
 │   ├── app/
-│   │   ├── (dashboard)/          ← main app pages (layout protected)
+│   │   ├── (dashboard)/
 │   │   │   ├── page.tsx          ← dashboard home
-│   │   │   ├── portfolio/
-│   │   │   ├── insights/
-│   │   │   ├── timeline/
-│   │   │   └── settings/
+│   │   │   ├── insights/         ← deep AI analysis page
+│   │   │   ├── timeline/         ← snapshot history + diffs
+│   │   │   ├── advisor/          ← RAG chat
+│   │   │   ├── goals/            ← corpus goal tracking
+│   │   │   └── settings/         ← account, AI provider, data management
 │   │   ├── api/
-│   │   │   ├── upload/           ← CSV upload + parse + snapshot creation
-│   │   │   ├── insights/         ← AI insight generation
-│   │   │   └── daily-analysis/   ← cron-triggered analysis + alert
+│   │   │   ├── upload/           ← Kite CSV + Groww XLSX upload
+│   │   │   ├── snapshots/
+│   │   │   │   ├── latest/       ← fetch latest equity + MF snapshot
+│   │   │   │   ├── all/          ← fetch all snapshots for timeline
+│   │   │   │   └── [id]/         ← delete snapshot
+│   │   │   ├── insights/
+│   │   │   │   ├── route.ts      ← general insight generation
+│   │   │   │   └── detailed/     ← deep analysis generation
+│   │   │   ├── advisor/
+│   │   │   │   └── chat/         ← RAG chat endpoint (streaming)
+│   │   │   ├── goals/            ← CRUD for goals
+│   │   │   ├── daily-analysis/   ← cron-triggered analysis + Resend alert
+│   │   │   ├── export/
+│   │   │   │   └── holdings/     ← CSV export of latest holdings
+│   │   │   └── admin/
+│   │   │       └── embed-all/    ← one-time backfill route for embeddings
+│   │   ├── login/                ← Google OAuth login page
 │   │   ├── layout.tsx
-│   │   └── page.tsx              ← landing / login
+│   │   └── page.tsx
 │   │
 │   ├── components/
 │   │   ├── ui/                   ← shadcn/ui primitives only
-│   │   ├── dashboard/            ← dashboard-specific components
-│   │   ├── portfolio/            ← holdings table, allocation chart
-│   │   ├── insights/             ← insight cards, recommendation display
-│   │   └── layout/               ← sidebar, navbar, shell
+│   │   ├── dashboard/
+│   │   ├── portfolio/            ← HoldingsTable, AllocationChart, MFHoldingsTable
+│   │   ├── insights/             ← InsightCard, DetailedInsightView
+│   │   ├── advisor/              ← ChatMessage, SuggestedQuestions
+│   │   └── layout/               ← Sidebar, ImportPortfolioModal
 │   │
 │   ├── features/
-│   │   ├── portfolio/            ← upload flow, snapshot logic
-│   │   └── ai/                   ← prompt builders, response parsers
+│   │   ├── portfolio/
+│   │   └── ai/
+│   │       ├── promptBuilder.ts        ← equity insight prompt
+│   │       ├── detailedPromptBuilder.ts← deep analysis prompt
+│   │       └── advisorPromptBuilder.ts ← RAG chat system prompt
 │   │
 │   ├── lib/
 │   │   ├── ai/
-│   │   │   └── client.ts         ← ONLY place Anthropic SDK is used
+│   │   │   ├── client.ts         ← ONLY place Anthropic/Gemini SDK is called for chat
+│   │   │   ├── embeddings.ts     ← ONLY place Gemini embedding SDK is called
+│   │   │   └── retrieval.ts      ← pgvector similarity search
 │   │   ├── db/
-│   │   │   └── supabase.ts       ← ONLY place Supabase client is initialised
+│   │   │   └── supabase.ts       ← browser + server + admin clients
 │   │   ├── finance/
-│   │   │   ├── calculations.ts   ← P&L, CAGR, allocation — pure functions, no AI
+│   │   │   ├── calculations.ts   ← P&L, CAGR, allocation
 │   │   │   ├── risk.ts           ← concentration, sector exposure
-│   │   │   └── tax.ts            ← STCG/LTCG logic
+│   │   │   ├── tax.ts            ← STCG/LTCG, harvesting opportunities
+│   │   │   ├── diff.ts           ← snapshot diff engine
+│   │   │   ├── goals.ts          ← corpus projection, gap analysis
+│   │   │   ├── sectors.ts        ← symbol → sector mapping
+│   │   │   ├── health.ts         ← portfolio health score
+│   │   │   └── combined.ts       ← equity + MF combined totals
 │   │   └── parsers/
-│   │       ├── kite.ts           ← Kite CSV parser
-│   │       └── groww.ts          ← Groww CSV parser
+│   │       ├── kite.ts           ← Kite CSV → Holding[]
+│   │       └── groww.ts          ← Groww XLSX → MutualFundHolding[]
 │   │
-│   ├── hooks/                    ← custom React hooks
-│   ├── stores/                   ← Zustand stores
-│   ├── types/                    ← shared TypeScript types and interfaces
-│   └── mock/                     ← mock data for development/testing
+│   ├── hooks/
+│   ├── stores/                   ← Zustand (chat history, portfolio state)
+│   ├── types/
+│   │   ├── portfolio.ts          ← Holding, PortfolioSnapshot, MutualFundHolding, InsightResponse etc.
+│   │   └── db.ts                 ← Supabase row types
+│   └── mock/
 ```
 
 ---
@@ -98,128 +135,29 @@ wealthos/
 
 **Deterministic finance logic and AI interpretation must never mix.**
 
-The AI (Claude) must NEVER calculate:
-- P&L or unrealised gains
-- CAGR or returns
-- Tax liability
-- Allocation percentages
-- Risk metrics
-- Concentration ratios
+The AI must NEVER calculate P&L, CAGR, tax, allocation %, risk metrics, or concentration ratios. All of these live in `src/lib/finance/` as pure TypeScript functions.
 
-All of the above live in `src/lib/finance/` as pure TypeScript functions.
-
-The AI ONLY receives the **already-calculated output** and does three things:
-1. Interprets what the numbers mean in plain language
-2. Prioritises which findings need attention
-3. Narrates the portfolio story over time
-
-**Example flow — correct:**
-```
-calculations.ts → { totalGain: 45000, concentration: { HDFC: 28% } }
-           ↓
-prompt-builder.ts → "Portfolio has ₹45,000 unrealised gain. HDFC concentration is 28%. What should the investor be aware of?"
-           ↓
-claude → "Your HDFC position is approaching concentration risk territory..."
-```
-
-**Example flow — wrong:**
-```
-claude → "Calculate my returns and tell me if I'm overweight"
-```
+The AI ONLY receives already-calculated output and interprets, prioritises, contextualises, and narrates it.
 
 ---
 
 ## AI client rules
 
-The Anthropic SDK is only ever called from `src/lib/ai/client.ts`. No component, hook, or API route imports the SDK directly.
-
-```ts
-// src/lib/ai/client.ts — the only file that touches Anthropic SDK
-import Anthropic from "@anthropic-ai/sdk";
-
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
-
-export async function generateInsight(prompt: string): Promise<InsightResponse> {
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 1000,
-    messages: [{ role: "user", content: prompt }],
-  });
-  // Always parse and validate before returning
-  return parseInsightResponse(response.content[0].text);
-}
-```
-
-All AI responses must be structured JSON validated against a TypeScript type before being used anywhere in the app.
-
----
-
-## TypeScript conventions
-
-- Strict mode is on. No `any` types.
-- All API responses have a typed interface in `src/types/`
-- All finance functions have typed inputs and outputs
-- All Supabase table rows have a generated or hand-written type in `src/types/db.ts`
-
-Key types to define early:
-
-```ts
-// src/types/portfolio.ts
-export interface Holding {
-  symbol: string;
-  name: string;
-  quantity: number;
-  avgCost: number;
-  currentPrice: number;
-  currentValue: number;
-  unrealisedGain: number;
-  unrealisedGainPct: number;
-  allocationPct: number;
-}
-
-export interface PortfolioSnapshot {
-  id: string;
-  userId: string;
-  createdAt: string;
-  totalValue: number;
-  totalCost: number;
-  totalGain: number;
-  totalGainPct: number;
-  holdings: Holding[];
-  source: "kite" | "groww" | "manual";
-}
-
-export interface InsightResponse {
-  summary: string;
-  recommendations: Recommendation[];
-  alerts: Alert[];
-  generatedAt: string;
-}
-
-export interface Recommendation {
-  action: "BUY" | "SELL" | "HOLD" | "REVIEW";
-  symbol: string;
-  reason: string;
-  priority: "LOW" | "MEDIUM" | "HIGH";
-}
-
-export interface Alert {
-  type: "CONCENTRATION" | "TAX" | "LOSS" | "GOAL" | "REBALANCE";
-  message: string;
-  urgency: "INFO" | "WARNING" | "ACTION_NEEDED";
-}
-```
+- `src/lib/ai/client.ts` is the ONLY file that calls the Anthropic or Gemini chat SDK
+- `src/lib/ai/embeddings.ts` is the ONLY file that calls the Gemini embedding SDK
+- The chat provider is determined by reading the `x-ai-provider` request header (sent by frontend from localStorage)
+- All AI responses must be structured JSON validated against a TypeScript type before use
+- Strip markdown code fences before JSON.parse: `.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim()`
+- Chat model: `claude-sonnet-4-20250514` (Anthropic) or `gemini-2.0-flash` (Gemini)
+- Embedding model: `gemini-embedding-001` always, output truncated to 768 dimensions via `.slice(0, 768)`
+- `max_tokens`: 4000 for insights/detailed, 800 for advisor chat
 
 ---
 
 ## Database schema (Supabase)
 
 ```sql
--- Users (handled by Supabase Auth)
-
--- Portfolio snapshots
+-- Equity snapshots
 create table portfolio_snapshots (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users not null,
@@ -232,7 +170,7 @@ create table portfolio_snapshots (
   raw_data jsonb
 );
 
--- Holdings (linked to snapshot)
+-- Equity holdings
 create table holdings (
   id uuid primary key default gen_random_uuid(),
   snapshot_id uuid references portfolio_snapshots not null,
@@ -247,7 +185,7 @@ create table holdings (
   allocation_pct numeric not null
 );
 
--- AI insights (linked to snapshot)
+-- AI insights
 create table ai_insights (
   id uuid primary key default gen_random_uuid(),
   snapshot_id uuid references portfolio_snapshots not null,
@@ -258,119 +196,193 @@ create table ai_insights (
   alerts jsonb,
   trigger text check (trigger in ('manual', 'cron', 'upload'))
 );
+
+-- RAG embeddings (pgvector, 768 dimensions)
+create table snapshot_embeddings (
+  id uuid primary key default gen_random_uuid(),
+  snapshot_id uuid references portfolio_snapshots not null,
+  user_id text not null,
+  chunk_type text check (chunk_type in ('snapshot_summary', 'diff_summary', 'insight_summary')),
+  content text not null,
+  embedding vector(768),
+  created_at timestamptz default now()
+);
+
+-- Advisor chat history
+create table advisor_conversations (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  role text check (role in ('user', 'assistant')),
+  content text not null,
+  created_at timestamptz default now()
+);
+
+-- Goals
+create table goals (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  name text not null,
+  target_corpus numeric not null,
+  target_date date not null,
+  expected_return numeric default 12,
+  created_at timestamptz default now()
+);
+
+-- Mutual fund snapshots (Groww)
+create table mutual_fund_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users not null,
+  created_at timestamptz default now(),
+  snapshot_date date not null,
+  total_invested numeric not null,
+  total_current_value numeric not null,
+  total_returns numeric not null,
+  total_returns_pct numeric not null
+);
+
+-- Mutual fund holdings
+create table mutual_fund_holdings (
+  id uuid primary key default gen_random_uuid(),
+  snapshot_id uuid references mutual_fund_snapshots not null,
+  scheme_name text not null,
+  amc text,
+  category text,
+  sub_category text,
+  folio_no text,
+  units numeric,
+  invested_value numeric,
+  current_value numeric,
+  returns numeric,
+  returns_pct numeric,
+  allocation_pct numeric
+);
 ```
+
+---
+
+## RAG architecture
+
+Three chunk types per snapshot stored in `snapshot_embeddings`:
+- `snapshot_summary` — full portfolio state on a date (all holdings, values, gain/loss)
+- `diff_summary` — changes between previous and current snapshot (buys, sells, profit bookings)
+- `insight_summary` — AI commentary from that date
+
+Embeddings use Gemini `gemini-embedding-001`, 768 dimensions (truncated via `.slice(0, 768)`).
+
+Retrieval: cosine similarity via pgvector `<=>` operator, top 5 chunks injected into advisor system prompt.
+
+Chat history: last 10 messages passed as conversation history. Capped at 800 max_tokens response.
+
+---
+
+## Upload flow
+
+**Kite (equity):** CSV file + report date → `parseKiteCSV` → `calcAllocationPct` + `calcPortfolioTotals` → insert `portfolio_snapshots` + `holdings` → `embedSnapshot`
+
+**Groww (MF):** XLSX file → `parseGrowwXLSX` (date auto-extracted from row 17: 'HOLDINGS AS ON YYYY-MM-DD') → insert `mutual_fund_snapshots` + `mutual_fund_holdings`
+
+**Duplicate check:** reject if a snapshot already exists for the same date. Allow replace with `replace=true` form field — deletes existing snapshot + holdings + insights + embeddings before reinserting.
+
+**Import UI:** single 'Import Portfolio' button in sidebar opens modal with two tabs: 'Kite Equity' (CSV + date picker) and 'Groww MF' (XLSX only, date auto-extracted).
 
 ---
 
 ## Environment variables
 
 ```env
-# .env.local
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 ANTHROPIC_API_KEY=
+GEMINI_API_KEY=
 RESEND_API_KEY=
-ALERT_EMAIL=your@email.com
-CRON_SECRET=a-random-secret-string
+ALERT_EMAIL=
+CRON_SECRET=
+AI_PROVIDER=anthropic
 ```
 
-Never expose `SUPABASE_SERVICE_ROLE_KEY` or `ANTHROPIC_API_KEY` to the client. These are server-only.
-
----
-
-## Alert / cron rules
-
-The `/api/daily-analysis` route is protected by a cron secret header:
-
-```ts
-if (req.headers.get("x-cron-secret") !== process.env.CRON_SECRET) {
-  return new Response("Unauthorised", { status: 401 });
-}
-```
-
-Vercel Cron config in `vercel.json`:
-
-```json
-{
-  "crons": [{
-    "path": "/api/daily-analysis",
-    "schedule": "0 8 * * *"
-  }]
-}
-```
-
-The daily analysis flow:
-1. Fetch latest snapshot for each user from DB
-2. Run deterministic analysis (finance functions)
-3. Check thresholds (concentration > 25%, loss > 10%, tax event approaching)
-4. If any threshold crossed → call Claude with analysis data
-5. Send email alert via Resend only if `urgency === "ACTION_NEEDED"`
+Never expose `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY` to the client.
 
 ---
 
 ## UI Design Guidelines
 
 ### Design language
-Calm, data-dense, institutional. Inspired by Linear and Vercel.
-No gradients, no shadows, no rounded corners on everything.
-Dark mode first.
+Calm, data-dense, institutional. Inspired by Linear and Vercel. Dark mode supported.
+No neon, no gradients, no crypto aesthetics.
 
-### Colors (Tailwind classes only)
-- Background: bg-background
-- Surface/cards: bg-card or bg-muted/40
-- Borders: border-border (use sparingly, 1px only)
-- Primary text: text-foreground
-- Muted text: text-muted-foreground
-- Positive/gain: text-emerald-500
-- Negative/loss: text-rose-500
-- Accent/active: text-primary
+### Colors
+- Background: `bg-background`
+- Surface: `bg-card` or `bg-muted/40`
+- Borders: `border-border` (1px, sparingly)
+- Primary text: `text-foreground`
+- Muted text: `text-muted-foreground`
+- Positive/gain: `text-emerald-500`
+- Negative/loss: `text-rose-500`
 
 ### Typography
-- Page titles: text-xl font-medium
-- Section labels: text-sm font-medium text-muted-foreground uppercase tracking-wide
-- Table headers: text-xs font-medium text-muted-foreground uppercase
-- Body: text-sm
-- Numbers/values: font-mono text-sm
+- Page titles: `text-2xl font-semibold tracking-tight`
+- Page subtitles: `text-sm text-muted-foreground mt-1`
+- Section labels: `text-xs font-medium tracking-widest uppercase text-muted-foreground`
+- Table headers: `text-xs font-medium text-muted-foreground uppercase`
+- Numbers/values: `font-mono text-sm`
 
 ### Layout
-- Sidebar: fixed left, 220px wide, bg-background border-r border-border
-- Main content: ml-[220px], p-8, max-w-7xl
-- Cards: rounded-lg border border-border bg-card p-6, no drop shadows
-- Stat cards: 4 in a row, each showing label + large value + sub-label
+- Sidebar: fixed left, 220px wide, `bg-background border-r border-border`
+- Main content: `ml-[220px] p-8 max-w-7xl`
+- Cards: `rounded-lg border border-border bg-card p-6` — no drop shadows
 
 ### Formatting
-- Currency: ₹1,23,456 (Indian format)
-- Percentages: +12.34% or -4.56% with color
-- Dates: 14 May 2026
-- Positive values prefixed with +, negative with -
+- Currency: ₹1,23,456 (Indian locale format)
+- Percentages: `+12.34%` or `-4.56%` with color
+- Dates: `14 May 2026`
+
+### Chat UI
+- User messages: right-aligned, `bg-foreground text-background rounded-2xl rounded-br-sm`
+- Assistant messages: left-aligned, no bubble, markdown rendered via `react-markdown` AFTER streaming completes
+- During streaming: render as plain `whitespace-pre-wrap` text
+- Provider badge shown on each assistant message
 
 ---
 
-## What to build first (in order)
+## Advisor chat guardrails (system prompt rules)
 
-1. Project init + folder structure + this file committed
-2. Types in `src/types/portfolio.ts`
-3. CSV parsers in `src/lib/parsers/`
-4. Finance calculations in `src/lib/finance/calculations.ts`
-5. Upload API route + snapshot save to Supabase
-6. Dashboard page with holdings table and allocation chart
-7. AI client + insight generation + display
-8. Daily analysis cron + Resend email alert
+- Only answer using data from retrieved context and current snapshot
+- If data is not in context, say so briefly and suggest uploading older CSVs
+- Never predict future prices or guarantee returns
+- Frame recommendations as observations, not advice
+- Decline off-topic questions and redirect to portfolio queries
+- Keep refusals short — no moralising or lectures
+- End with a brief disclaimer only when relevant
 
-Do not jump ahead. Each step depends on the previous one being solid.
+---
+
+## Sector mapping (hardcoded in sectors.ts)
+
+```
+Power: ADANIPOWER, NTPC, TATAPOWER, POWERGRID, NHPC, RPOWER, RTNPOWER
+Financials: JIOFIN, SBIN, SBICARD, IDBI, CDSL
+Metals: TATASTEEL, BHARATFORG
+Infrastructure: RVNL, JSWINFRA, PNCINFRA, BEL, COCHINSHIP
+Consumer: ASIANPAINT, COLPAL, HINDUNILVR, IRCTC, CIPLA
+Auto: TMCV, TMPV
+ETFs: HDFCGOLD, NIFTYBEES, SILVERBEES
+Technology: WIPRO, ACCELYA
+Other: anything not matched
+```
 
 ---
 
 ## What NOT to do
 
-- Do not add LiteLLM, LangChain, LangGraph, CrewAI, or any agent framework until explicitly instructed
-- Do not add FastAPI or any Python backend until explicitly instructed
-- Do not build multi-user features until the personal use case is validated
-- Do not call the Anthropic SDK from anywhere except `src/lib/ai/client.ts`
+- Do not call Anthropic/Gemini SDK outside `src/lib/ai/client.ts`
+- Do not call Gemini embedding SDK outside `src/lib/ai/embeddings.ts`
+- Do not call Supabase outside `src/lib/db/supabase.ts`
 - Do not put financial calculations inside AI prompts
+- Do not add LangChain, LangGraph, CrewAI, LiteLLM, or FastAPI
 - Do not use `any` in TypeScript
-- Do not add Redis or BullMQ until async job queues are actually needed
+- Do not add Redis or BullMQ until async queues are actually needed
+- Do not build multi-user BYOK until personal use is fully validated
 
 ---
 
