@@ -1,16 +1,15 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
+import { streamAdvisorResponse } from "@/lib/ai/client";
+import {
+  getEffectiveApiKey,
+  NO_API_KEY_CONFIGURED_MESSAGE,
+} from "@/lib/ai/user-api-keys";
 import { requireAuth } from "@/lib/db/require-auth";
 import { createSupabaseServerClient } from "@/lib/db/supabase";
 import { retrieveRelevantContext } from "../../../../lib/ai/retrieval";
 import { buildAdvisorSystemPrompt } from "../../../../features/ai/advisorPromptBuilder";
 import type { PortfolioSnapshot } from "../../../../types/portfolio";
 import type { HoldingRow, PortfolioSnapshotRow } from "../../../../types/db";
-import {
-  getAIProviderFromRequest,
-  type AIProvider,
-} from "../../../../lib/ai/provider";
+import { getAIProviderFromRequest } from "../../../../lib/ai/provider";
 
 export const runtime = "nodejs";
 
@@ -81,6 +80,11 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const provider = getAIProviderFromRequest(request);
+  const apiKey = await getEffectiveApiKey(userId, provider);
+
+  if (apiKey === undefined) {
+    return Response.json({ error: NO_API_KEY_CONFIGURED_MESSAGE }, { status: 400 });
+  }
 
   const [retrievedContext, currentSnapshot] = await Promise.all([
     retrieveRelevantContext(sanitizedMessage, userId, 5),
@@ -106,9 +110,18 @@ export async function POST(request: Request): Promise<Response> {
           ),
         );
 
-        const assistantResponse = provider === "gemini"
-          ? await streamGemini(systemPrompt, conversationHistory, sanitizedMessage, controller, encoder)
-          : await streamAnthropic(systemPrompt, conversationHistory, sanitizedMessage, controller, encoder);
+        const assistantResponse = await streamAdvisorResponse({
+          provider,
+          apiKey,
+          systemPrompt,
+          conversationHistory,
+          userMessage: sanitizedMessage,
+          onDelta(text) {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: "delta", text })}\n\n`),
+            );
+          },
+        });
 
         await saveConversationTurn(
           supabase,
@@ -173,94 +186,6 @@ function isRateLimited(userId: string): boolean {
     windowStart: current.windowStart,
   });
   return false;
-}
-
-async function streamAnthropic(
-  systemPrompt: string,
-  conversationHistory: Message[],
-  userMessage: string,
-  controller: ReadableStreamDefaultController,
-  encoder: TextEncoder,
-): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (apiKey === undefined || apiKey.trim() === "") {
-    throw new Error("Missing ANTHROPIC_API_KEY");
-  }
-
-  const historyWindow = conversationHistory.slice(-10);
-  const client = new Anthropic({ apiKey });
-  const messages: Anthropic.MessageParam[] = [
-    ...historyWindow.map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    })),
-    { role: "user", content: userMessage },
-  ];
-
-  const stream = client.messages.stream({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 800,
-    system: systemPrompt,
-    messages,
-  });
-
-  let fullText = "";
-
-  for await (const chunk of stream) {
-    if (
-      chunk.type === "content_block_delta" &&
-      chunk.delta.type === "text_delta"
-    ) {
-      fullText += chunk.delta.text;
-      controller.enqueue(
-        encoder.encode(
-          `data: ${JSON.stringify({ type: "delta", text: chunk.delta.text })}\n\n`,
-        ),
-      );
-    }
-  }
-
-  return fullText;
-}
-
-async function streamGemini(
-  systemPrompt: string,
-  conversationHistory: Message[],
-  userMessage: string,
-  controller: ReadableStreamDefaultController,
-  encoder: TextEncoder,
-): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (apiKey === undefined || apiKey.trim() === "") {
-    throw new Error("Missing GEMINI_API_KEY");
-  }
-
-  const gemini = new GoogleGenerativeAI(apiKey);
-  const model = gemini.getGenerativeModel({
-    model: "gemini-2.0-flash",
-    systemInstruction: systemPrompt,
-  });
-
-  const history = conversationHistory.map((m) => ({
-    role: m.role === "assistant" ? "model" : "user",
-    parts: [{ text: m.content }],
-  }));
-
-  const chat = model.startChat({ history });
-  const result = await chat.sendMessageStream(userMessage);
-  let fullText = "";
-
-  for await (const chunk of result.stream) {
-    const text = chunk.text();
-    if (text) {
-      fullText += text;
-      controller.enqueue(
-        encoder.encode(`data: ${JSON.stringify({ type: "delta", text })}\n\n`),
-      );
-    }
-  }
-
-  return fullText;
 }
 
 async function saveConversationTurn(

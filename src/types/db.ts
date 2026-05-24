@@ -98,6 +98,20 @@ export type MutualFundHoldingRow = {
   allocation_pct: number | null;
 };
 
+export type SymbolSectorRow = {
+  symbol: string;
+  sector: string;
+  classified_by: "hardcoded" | "ai" | "user" | null;
+  created_at: string | null;
+};
+
+export type UserApiKeyRow = {
+  user_id: string;
+  anthropic_key: string | null;
+  gemini_key: string | null;
+  updated_at: string | null;
+};
+
 export interface Database {
   public: {
     Tables: {
@@ -169,6 +183,22 @@ export interface Database {
           id?: string;
         };
         Update: Partial<MutualFundHoldingRow>;
+        Relationships: [];
+      };
+      symbol_sectors: {
+        Row: SymbolSectorRow;
+        Insert: Omit<SymbolSectorRow, "created_at"> & {
+          created_at?: string;
+        };
+        Update: Partial<SymbolSectorRow>;
+        Relationships: [];
+      };
+      user_api_keys: {
+        Row: UserApiKeyRow;
+        Insert: Omit<UserApiKeyRow, "updated_at"> & {
+          updated_at?: string;
+        };
+        Update: Partial<UserApiKeyRow>;
         Relationships: [];
       };
     };

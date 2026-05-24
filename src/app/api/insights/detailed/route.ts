@@ -1,11 +1,15 @@
 import { generateDetailedInsight } from "@/lib/ai/client";
 import { requireAuth } from "@/lib/db/require-auth";
 import { calcAllocationPct } from "@/lib/finance/calculations";
-import { calcHealthScore } from "@/lib/finance/health";
+import { calcHealthScoreWithSectors } from "@/lib/finance/health";
 import { classifySectors } from "@/lib/finance/sectors";
 import { calcTaxSummary } from "@/lib/finance/tax";
 import { buildDetailedInsightPrompt } from "@/features/ai/promptBuilder";
 import { getAIProviderFromRequest, isAIProvider } from "@/lib/ai/provider";
+import {
+  getEffectiveApiKey,
+  NO_API_KEY_CONFIGURED_MESSAGE,
+} from "@/lib/ai/user-api-keys";
 import type { Database, Json } from "@/types/db";
 import type { AIProvider } from "@/lib/ai/provider";
 import type { DetailedInsightResponse, Holding, PortfolioSnapshot } from "@/types/portfolio";
@@ -148,9 +152,17 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
+    const provider = getAIProviderFromRequest(request);
+    const apiKey = await getEffectiveApiKey(userId, provider);
+
+    if (apiKey === undefined) {
+      return Response.json({ error: NO_API_KEY_CONFIGURED_MESSAGE }, { status: 400 });
+    }
+
+    const anthropicApiKey = await getEffectiveApiKey(userId, "anthropic");
     const typedSnapshot = mapSnapshot(snapshot, holdings);
-    const healthScore = calcHealthScore(holdings);
-    const sectors = classifySectors(holdings);
+    const sectors = await classifySectors(holdings, anthropicApiKey);
+    const healthScore = calcHealthScoreWithSectors(holdings, sectors);
     const taxSummary = calcTaxSummary(holdings);
     const prompt = buildDetailedInsightPrompt(
       typedSnapshot,
@@ -160,8 +172,7 @@ export async function POST(request: Request): Promise<Response> {
       taxSummary,
     );
 
-    const provider = getAIProviderFromRequest(request);
-    const insight = await generateDetailedInsight(prompt, provider);
+    const insight = await generateDetailedInsight(prompt, provider, apiKey);
 
     const { error: insertError } = await supabase.from("ai_insights").insert({
       snapshot_id: snapshot.id,

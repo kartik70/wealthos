@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/table";
 import { withAIProviderHeaders } from "@/lib/ai/provider";
 import { calcHealthScore } from "@/lib/finance/health";
-import { classifySectors } from "@/lib/finance/sectors";
+import { classifySectorsSync } from "@/lib/finance/sector-map";
 import { calcTaxSummary } from "@/lib/finance/tax";
 import { cn } from "@/lib/utils";
 import type {
@@ -141,7 +141,7 @@ export default function InsightsPage() {
   }, []);
 
   const healthScore = useMemo<HealthScoreResult>(() => calcHealthScore(holdings), [holdings]);
-  const sectors = useMemo<SectorAllocation[]>(() => classifySectors(holdings), [holdings]);
+  const sectors = useMemo<SectorAllocation[]>(() => classifySectorsSync(holdings), [holdings]);
   const taxSummary = useMemo<TaxSummary>(() => calcTaxSummary(holdings), [holdings]);
 
   const sortedActionPlan = useMemo<DetailedActionPlan[]>(() => {

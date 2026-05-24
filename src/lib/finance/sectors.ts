@@ -1,53 +1,154 @@
 import type { Holding, SectorAllocation } from "@/types/portfolio";
+import type { Database } from "@/types/db";
+import {
+  buildSectorAllocations,
+  DEFAULT_SECTOR,
+  getHardcodedSectorForSymbol,
+  normalizeSector,
+  normalizeSymbol,
+  SYMBOL_TO_SECTOR,
+} from "./sector-map";
 
-const SECTOR_SYMBOL_MAP: Record<string, string[]> = {
-  Power: ["ADANIPOWER", "NTPC", "TATAPOWER", "POWERGRID", "NHPC", "RPOWER", "RTNPOWER"],
-  Financials: ["JIOFIN", "SBIN", "SBICARD", "IDBI", "CDSL"],
-  Metals: ["TATASTEEL", "BHARATFORG"],
-  Infrastructure: ["RVNL", "JSWINFRA", "PNCINFRA", "BEL", "COCHINSHIP"],
-  Consumer: ["ASIANPAINT", "COLPAL", "HINDUNILVR", "IRCTC"],
-  Auto: ["TMCV", "TMPV"],
-  ETFs: ["HDFCGOLD", "NIFTYBEES", "SILVERBEES"],
-  Technology: ["WIPRO", "ACCELYA"],
-};
+type SymbolSectorInsert = Database["public"]["Tables"]["symbol_sectors"]["Insert"];
 
-const DEFAULT_SECTOR = "Other";
+let seedPromise: Promise<void> | null = null;
 
-const SYMBOL_TO_SECTOR = new Map<string, string>(
-  Object.entries(SECTOR_SYMBOL_MAP).flatMap(([sector, symbols]) =>
-    symbols.map((symbol) => [symbol, sector] as const),
-  ),
-);
-
-function getSectorForSymbol(symbol: string): string {
-  return SYMBOL_TO_SECTOR.get(symbol.toUpperCase()) ?? DEFAULT_SECTOR;
+export async function backfillHardcodedSectorsOnStartup(): Promise<void> {
+  await ensureHardcodedSectorsBackfilled();
 }
 
-export function classifySectors(holdings: Holding[]): SectorAllocation[] {
-  const totalValue = holdings.reduce((sum, holding) => sum + holding.currentValue, 0);
-  const sectorMap = new Map<string, { value: number; symbols: string[] }>();
+export async function classifySectors(
+  holdings: Holding[],
+  aiApiKey?: string,
+): Promise<SectorAllocation[]> {
+  await ensureHardcodedSectorsBackfilled();
 
-  for (const holding of holdings) {
-    const sector = getSectorForSymbol(holding.symbol);
-    const existing = sectorMap.get(sector);
+  const uniqueSymbols = Array.from(
+    new Set(holdings.map((holding) => normalizeSymbol(holding.symbol))),
+  ).filter((symbol) => symbol !== "");
+  const sectorsBySymbol = await getSectorsForSymbols(uniqueSymbols, aiApiKey);
 
-    if (existing) {
-      existing.value += holding.currentValue;
-      existing.symbols.push(holding.symbol);
-    } else {
-      sectorMap.set(sector, {
-        value: holding.currentValue,
-        symbols: [holding.symbol],
-      });
-    }
+  return buildSectorAllocations(
+    holdings,
+    (symbol) => sectorsBySymbol.get(normalizeSymbol(symbol)) ?? DEFAULT_SECTOR,
+  );
+}
+
+async function ensureHardcodedSectorsBackfilled(): Promise<void> {
+  seedPromise ??= backfillHardcodedSectorsIfEmpty();
+  await seedPromise;
+}
+
+async function backfillHardcodedSectorsIfEmpty(): Promise<void> {
+  const { createSupabaseAdminClient } = await import("@/lib/db/supabase");
+  const supabase = createSupabaseAdminClient();
+  const { count, error: countError } = await supabase
+    .from("symbol_sectors")
+    .select("symbol", { count: "exact", head: true });
+
+  if (countError !== null) {
+    throw new Error(`Failed to check symbol sector cache: ${countError.message}`);
   }
 
-  return Array.from(sectorMap.entries())
-    .map(([sector, data]) => ({
+  if ((count ?? 0) > 0) {
+    return;
+  }
+
+  const rows: SymbolSectorInsert[] = Array.from(SYMBOL_TO_SECTOR.entries()).map(
+    ([symbol, sector]) => ({
+      symbol,
       sector,
-      value: data.value,
-      allocationPct: totalValue === 0 ? 0 : (data.value / totalValue) * 100,
-      symbols: data.symbols.sort((left, right) => left.localeCompare(right)),
-    }))
-    .sort((left, right) => right.allocationPct - left.allocationPct);
+      classified_by: "hardcoded",
+    }),
+  );
+
+  const { error: upsertError } = await supabase
+    .from("symbol_sectors")
+    .upsert(rows, { onConflict: "symbol" });
+
+  if (upsertError !== null) {
+    throw new Error(`Failed to seed hardcoded sector cache: ${upsertError.message}`);
+  }
+}
+
+async function getSectorsForSymbols(
+  symbols: string[],
+  aiApiKey?: string,
+): Promise<Map<string, string>> {
+  const sectorsBySymbol = new Map<string, string>();
+  const { createSupabaseAdminClient } = await import("@/lib/db/supabase");
+  const supabase = createSupabaseAdminClient();
+
+  if (symbols.length === 0) {
+    return sectorsBySymbol;
+  }
+
+  const { data, error } = await supabase
+    .from("symbol_sectors")
+    .select("symbol,sector")
+    .in("symbol", symbols);
+
+  if (error !== null) {
+    throw new Error(`Failed to read symbol sector cache: ${error.message}`);
+  }
+
+  for (const row of data ?? []) {
+    sectorsBySymbol.set(normalizeSymbol(row.symbol), normalizeSector(row.sector));
+  }
+
+  for (const symbol of symbols) {
+    if (sectorsBySymbol.has(symbol)) {
+      continue;
+    }
+
+    const hardcodedSector = getHardcodedSectorForSymbol(symbol);
+    const sector =
+      hardcodedSector === null
+        ? await classifyAndCacheAISector(symbol, aiApiKey)
+        : await cacheHardcodedSector(symbol, hardcodedSector);
+    sectorsBySymbol.set(symbol, sector);
+  }
+
+  return sectorsBySymbol;
+}
+
+async function cacheHardcodedSector(symbol: string, sector: string): Promise<string> {
+  const normalizedSector = normalizeSector(sector);
+  const { createSupabaseAdminClient } = await import("@/lib/db/supabase");
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase.from("symbol_sectors").upsert(
+    {
+      symbol,
+      sector: normalizedSector,
+      classified_by: "hardcoded",
+    },
+    { onConflict: "symbol" },
+  );
+
+  if (error !== null) {
+    throw new Error(`Failed to cache hardcoded sector for ${symbol}: ${error.message}`);
+  }
+
+  return normalizedSector;
+}
+
+async function classifyAndCacheAISector(symbol: string, apiKey?: string): Promise<string> {
+  const { classifyIndianStockSector } = await import("@/lib/ai/client");
+  const sector = normalizeSector(await classifyIndianStockSector(symbol, apiKey));
+  const { createSupabaseAdminClient } = await import("@/lib/db/supabase");
+  const supabase = createSupabaseAdminClient();
+  const { error } = await supabase.from("symbol_sectors").upsert(
+    {
+      symbol,
+      sector,
+      classified_by: "ai",
+    },
+    { onConflict: "symbol" },
+  );
+
+  if (error !== null) {
+    throw new Error(`Failed to cache AI sector for ${symbol}: ${error.message}`);
+  }
+
+  return sector;
 }

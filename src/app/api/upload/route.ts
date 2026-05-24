@@ -7,6 +7,7 @@ import {
 import { parseGrowwXLSX } from "../../../lib/parsers/groww";
 import { parseKiteCSV } from "../../../lib/parsers/kite";
 import { embedSnapshot } from "../../../lib/ai/embeddings";
+import { getEffectiveApiKey } from "@/lib/ai/user-api-keys";
 import type { Database } from "../../../types/db";
 
 export const runtime = "nodejs";
@@ -159,9 +160,15 @@ async function handleKiteUpload(formData: FormData): Promise<Response> {
     holdings,
     source: "kite" as const,
   };
-  embedSnapshot(snapshotForEmbed, holdings).catch((err: unknown) => {
-    console.error("embedSnapshot failed silently:", err);
-  });
+  getEffectiveApiKey(userId, "gemini")
+    .then((apiKey) => {
+      if (apiKey !== undefined) {
+        return embedSnapshot(snapshotForEmbed, holdings, undefined, apiKey);
+      }
+    })
+    .catch((err: unknown) => {
+      console.error("embedSnapshot failed silently:", err);
+    });
 
   return Response.json(
     {

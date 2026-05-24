@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createSupabaseBrowserClient } from "@/lib/db/supabase";
 import {
@@ -24,6 +25,12 @@ interface SnapshotListItem {
   id: string;
   createdAt: string;
   totalValue: number;
+}
+
+interface ApiKeyStatus {
+  anthropicLast4: string | null;
+  geminiLast4: string | null;
+  updatedAt: string | null;
 }
 
 const rupeeFormatter = new Intl.NumberFormat("en-IN", {
@@ -82,6 +89,15 @@ export default function SettingsPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [pendingDeleteSnapshot, setPendingDeleteSnapshot] = useState<SnapshotListItem | null>(null);
   const [deletingSnapshotId, setDeletingSnapshotId] = useState<string | null>(null);
+  const [anthropicKey, setAnthropicKey] = useState("");
+  const [geminiKey, setGeminiKey] = useState("");
+  const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyStatus>({
+    anthropicLast4: null,
+    geminiLast4: null,
+    updatedAt: null,
+  });
+  const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(true);
+  const [isSavingApiKeys, setIsSavingApiKeys] = useState(false);
 
   const loadSnapshots = useCallback(async () => {
     setIsLoadingSnapshots(true);
@@ -109,6 +125,33 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const loadApiKeys = useCallback(async () => {
+    setIsLoadingApiKeys(true);
+
+    try {
+      const response = await fetch("/api/settings/api-keys");
+      const payload: unknown = await response.json();
+
+      if (!response.ok) {
+        const message =
+          typeof payload === "object" &&
+          payload !== null &&
+          "error" in payload &&
+          typeof payload.error === "string"
+            ? payload.error
+            : "Failed to load API keys";
+        throw new Error(message);
+      }
+
+      setApiKeyStatus(payload as ApiKeyStatus);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load API keys";
+      toast.error(message);
+    } finally {
+      setIsLoadingApiKeys(false);
+    }
+  }, []);
+
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
 
@@ -118,7 +161,8 @@ export default function SettingsPage() {
     });
 
     void loadSnapshots();
-  }, [loadSnapshots]);
+    void loadApiKeys();
+  }, [loadApiKeys, loadSnapshots]);
 
   function handleProviderChange(nextProvider: AIProvider) {
     setProvider(nextProvider);
@@ -162,6 +206,48 @@ export default function SettingsPage() {
       toast.error(message);
     } finally {
       setIsExporting(false);
+    }
+  }
+
+  async function handleSaveApiKeys() {
+    if (anthropicKey.trim() === "" && geminiKey.trim() === "") {
+      toast.error("Enter at least one API key to save");
+      return;
+    }
+
+    setIsSavingApiKeys(true);
+
+    try {
+      const response = await fetch("/api/settings/api-keys", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          anthropicKey,
+          geminiKey,
+        }),
+      });
+      const payload: unknown = await response.json();
+
+      if (!response.ok) {
+        const message =
+          typeof payload === "object" &&
+          payload !== null &&
+          "error" in payload &&
+          typeof payload.error === "string"
+            ? payload.error
+            : "Failed to save API keys";
+        throw new Error(message);
+      }
+
+      setApiKeyStatus(payload as ApiKeyStatus);
+      setAnthropicKey("");
+      setGeminiKey("");
+      toast.success("API keys saved");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to save API keys";
+      toast.error(message);
+    } finally {
+      setIsSavingApiKeys(false);
     }
   }
 
@@ -277,6 +363,75 @@ export default function SettingsPage() {
           ))}
         </div>
         <Label className="sr-only">AI Provider</Label>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+              API Keys
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Keys are encrypted before storage. Saved keys are shown by last four characters only.
+            </p>
+          </div>
+
+          <Button
+            type="button"
+            onClick={() => void handleSaveApiKeys()}
+            disabled={isSavingApiKeys}
+          >
+            {isSavingApiKeys ? "Saving..." : "Save keys"}
+          </Button>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <div className="grid gap-2">
+            <Label htmlFor="anthropic-api-key">Anthropic API Key</Label>
+            <Input
+              id="anthropic-api-key"
+              type="password"
+              value={anthropicKey}
+              placeholder={
+                apiKeyStatus.anthropicLast4 === null
+                  ? "sk-ant-..."
+                  : `Saved ending in ${apiKeyStatus.anthropicLast4}`
+              }
+              autoComplete="off"
+              onChange={(event) => setAnthropicKey(event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {isLoadingApiKeys
+                ? "Checking saved key..."
+                : apiKeyStatus.anthropicLast4 === null
+                  ? "No Anthropic key saved."
+                  : `Saved key ends in ${apiKeyStatus.anthropicLast4}.`}
+            </p>
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="gemini-api-key">Gemini API Key</Label>
+            <Input
+              id="gemini-api-key"
+              type="password"
+              value={geminiKey}
+              placeholder={
+                apiKeyStatus.geminiLast4 === null
+                  ? "AIza..."
+                  : `Saved ending in ${apiKeyStatus.geminiLast4}`
+              }
+              autoComplete="off"
+              onChange={(event) => setGeminiKey(event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {isLoadingApiKeys
+                ? "Checking saved key..."
+                : apiKeyStatus.geminiLast4 === null
+                  ? "No Gemini key saved."
+                  : `Saved key ends in ${apiKeyStatus.geminiLast4}.`}
+            </p>
+          </div>
+        </div>
       </section>
 
       <section className="rounded-lg border border-border bg-card p-6">

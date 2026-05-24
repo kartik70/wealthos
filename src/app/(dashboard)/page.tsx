@@ -150,13 +150,13 @@ export default function DashboardPage() {
     return mfTotals.totalReturns >= 0 ? "text-emerald-700" : "text-red-700";
   }, [mfTotals]);
 
-  const holdingsInLoss = useMemo(() => {
-    if (equitySnapshot === null) {
-      return 0;
+  const totalReturnsTone = useMemo(() => {
+    if (combinedPortfolio === null) {
+      return "text-foreground";
     }
 
-    return equitySnapshot.holdings.filter((holding) => holding.unrealisedGain < 0).length;
-  }, [equitySnapshot]);
+    return combinedPortfolio.totalReturns >= 0 ? "text-emerald-700" : "text-red-700";
+  }, [combinedPortfolio]);
 
   async function handleGenerateInsights() {
     if (equitySnapshot?.snapshotId === null || equitySnapshot?.snapshotId === undefined) {
@@ -223,110 +223,65 @@ export default function DashboardPage() {
         <p className="mt-1 text-sm text-muted-foreground">Portfolio snapshot</p>
       </div>
 
-      {(hasEquityHoldings || isLoading) && (
-        <div className="space-y-2">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Equity (Kite)
-          </p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              label="Total Value"
-              value={
-                isLoading
-                  ? "--"
-                  : equityTotals === undefined
-                    ? "--"
-                    : rupeeFormatter.format(equityTotals.totalValue)
-              }
-              isLoading={isLoading}
-            />
-            <StatCard
-              label="Total Gain/Loss"
-              value={
-                isLoading
-                  ? "--"
-                  : equityTotals === undefined
-                    ? "--"
-                    : rupeeFormatter.format(equityTotals.totalGain)
-              }
-              valueClassName={equityTotals === undefined ? undefined : equityGainTone}
-              isLoading={isLoading}
-            />
-            <StatCard
-              label="Gain %"
-              value={
-                equityTotals === undefined
-                  ? "--"
-                  : `${percentFormatter.format(equityTotals.totalGainPct)}%`
-              }
-              valueClassName={equityTotals === undefined ? undefined : equityGainTone}
-              isLoading={isLoading}
-            />
-            <StatCard
-              label="Holdings in Loss"
-              value={equitySnapshot === null ? "--" : String(holdingsInLoss)}
-              valueClassName={equitySnapshot === null ? undefined : "text-red-700"}
-              isLoading={isLoading}
-            />
-          </div>
-        </div>
-      )}
-
-      {(hasMutualFundHoldings || (isLoading && !hasEquityHoldings)) && (
-        <div className="space-y-2">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Mutual funds (Groww)
-          </p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <StatCard
-              label="Total MF Value"
-              value={
-                isLoading
-                  ? "--"
-                  : mfTotals === undefined
-                    ? "--"
-                    : rupeeFormatter.format(mfTotals.totalCurrentValue)
-              }
-              isLoading={isLoading}
-            />
-            <StatCard
-              label="MF Returns"
-              value={
-                isLoading
-                  ? "--"
-                  : mfTotals === undefined
-                    ? "--"
-                    : rupeeFormatter.format(mfTotals.totalReturns)
-              }
-              valueClassName={mfTotals === undefined ? undefined : mfGainTone}
-              isLoading={isLoading}
-            />
-            <StatCard
-              label="MF Returns %"
-              value={
-                mfTotals === undefined
-                  ? "--"
-                  : `${percentFormatter.format(mfTotals.totalReturnsPct)}%`
-              }
-              valueClassName={mfTotals === undefined ? undefined : mfGainTone}
-              isLoading={isLoading}
-            />
-          </div>
-        </div>
-      )}
-
-      {combinedPortfolio !== null && hasEquityHoldings && hasMutualFundHoldings ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <StatCard
-            label="Combined portfolio value"
-            value={rupeeFormatter.format(combinedPortfolio.totalValue)}
-          />
-          <StatCard
-            label="Equity vs MF split"
-            value={`${percentFormatter.format(combinedPortfolio.equity.allocationPct)}% / ${percentFormatter.format(combinedPortfolio.mutualFunds.allocationPct)}%`}
-          />
-        </div>
-      ) : null}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <StatCard
+          label="Combined Value"
+          value={
+            combinedPortfolio === null
+              ? "--"
+              : rupeeFormatter.format(combinedPortfolio.totalValue)
+          }
+          isLoading={isLoading}
+        />
+        <StatCard
+          label="Equity Value"
+          value={
+            equityTotals === undefined
+              ? "--"
+              : rupeeFormatter.format(equityTotals.totalValue)
+          }
+          isLoading={isLoading}
+        />
+        <StatCard
+          label="MF Value"
+          value={
+            mfTotals === undefined
+              ? "--"
+              : rupeeFormatter.format(mfTotals.totalCurrentValue)
+          }
+          isLoading={isLoading}
+        />
+        <StatCard
+          label="Total Returns"
+          value={
+            combinedPortfolio === null
+              ? "--"
+              : rupeeFormatter.format(combinedPortfolio.totalReturns)
+          }
+          valueClassName={combinedPortfolio === null ? undefined : totalReturnsTone}
+          isLoading={isLoading}
+        />
+        <StatCard
+          label="Equity Gain %"
+          value={
+            equityTotals === undefined
+              ? "--"
+              : `${percentFormatter.format(equityTotals.totalGainPct)}%`
+          }
+          valueClassName={equityTotals === undefined ? undefined : equityGainTone}
+          isLoading={isLoading}
+        />
+        <StatCard
+          label="MF Returns %"
+          value={
+            mfTotals === undefined
+              ? "--"
+              : `${percentFormatter.format(mfTotals.totalReturnsPct)}%`
+          }
+          valueClassName={mfTotals === undefined ? undefined : mfGainTone}
+          isLoading={isLoading}
+        />
+      </div>
 
       {showEmptyState && (
         <div className="grid gap-4">
@@ -377,37 +332,6 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       )}
-
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Snapshot</CardTitle>
-            <CardDescription>
-              {equitySnapshot?.snapshotId ?? mutualFundSnapshot?.snapshotId ?? "No saved snapshot"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 text-sm">
-            <div className="flex items-center justify-between border-b pb-2">
-              <span className="text-muted-foreground">Equity source</span>
-              <span className="font-medium capitalize">
-                {equitySnapshot?.source ?? "—"}
-              </span>
-            </div>
-            <div className="flex items-center justify-between border-b pb-2">
-              <span className="text-muted-foreground">Equity holdings</span>
-              <span className="font-medium">
-                {equitySnapshot === null ? "--" : equitySnapshot.holdings.length}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">MF holdings</span>
-              <span className="font-medium">
-                {mutualFundSnapshot === null ? "--" : mutualFundSnapshot.holdings.length}
-              </span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
 
       {hasAnyHoldings && !isLoading && (
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.8fr)]">

@@ -10,18 +10,19 @@ type EmbeddingInsert = Database["public"]["Tables"]["snapshot_embeddings"]["Inse
 
 let geminiEmbeddingClient: GoogleGenerativeAI | null = null;
 
-export async function generateEmbedding(text: string): Promise<number[]> {
-  const apiKey = process.env.GEMINI_API_KEY;
+export async function generateEmbedding(text: string, apiKey?: string): Promise<number[]> {
+  const resolvedApiKey = apiKey ?? process.env.GEMINI_API_KEY;
 
-  if (apiKey === undefined || apiKey.trim() === "") {
+  if (resolvedApiKey === undefined || resolvedApiKey.trim() === "") {
     throw new Error("Missing GEMINI_API_KEY for embeddings");
   }
 
-  if (geminiEmbeddingClient === null) {
-    geminiEmbeddingClient = new GoogleGenerativeAI(apiKey);
-  }
+  const client =
+    apiKey === undefined
+      ? (geminiEmbeddingClient ??= new GoogleGenerativeAI(resolvedApiKey))
+      : new GoogleGenerativeAI(resolvedApiKey);
 
-  const model = geminiEmbeddingClient.getGenerativeModel({ 
+  const model = client.getGenerativeModel({ 
   model: "gemini-embedding-001",
 });
 
@@ -36,6 +37,7 @@ export async function embedSnapshot(
   snapshot: PortfolioSnapshot,
   holdings: Holding[],
   diff?: SnapshotDiff,
+  apiKey?: string,
 ): Promise<void> {
   const supabase = createSupabaseAdminClient();
   const rows: EmbeddingInsert[] = [];
@@ -66,7 +68,7 @@ export async function embedSnapshot(
 
   const snapshotSummaryText = `On ${date}, portfolio value was ₹${snapshot.totalValue.toFixed(0)}, total gain/loss ₹${snapshot.totalGain.toFixed(0)} (${snapshot.totalGainPct >= 0 ? "+" : ""}${snapshot.totalGainPct.toFixed(2)}%). Holdings: ${holdingsSummary}${mfSentence}`;
 
-  const snapshotEmbedding = await generateEmbedding(snapshotSummaryText);
+  const snapshotEmbedding = await generateEmbedding(snapshotSummaryText, apiKey);
   rows.push({
     snapshot_id: snapshot.id,
     user_id: snapshot.userId,
@@ -107,7 +109,7 @@ export async function embedSnapshot(
         ? `Between ${prevDate} and ${date}: ${parts.join("; ")}`
         : `Between ${prevDate} and ${date}: no significant position changes`;
 
-    const diffEmbedding = await generateEmbedding(diffText);
+    const diffEmbedding = await generateEmbedding(diffText, apiKey);
     rows.push({
       snapshot_id: snapshot.id,
       user_id: snapshot.userId,
@@ -126,7 +128,7 @@ export async function embedSnapshot(
     .maybeSingle();
 
   if (insight?.summary !== null && insight?.summary !== undefined && insight.summary !== "") {
-    const insightEmbedding = await generateEmbedding(insight.summary);
+    const insightEmbedding = await generateEmbedding(insight.summary, apiKey);
     rows.push({
       snapshot_id: snapshot.id,
       user_id: snapshot.userId,

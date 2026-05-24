@@ -1,6 +1,7 @@
 import type { HealthScoreResult, Holding } from "@/types/portfolio";
+import type { SectorAllocation } from "@/types/portfolio";
 
-import { classifySectors } from "./sectors";
+import { classifySectorsSync } from "./sector-map";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -11,6 +12,13 @@ function roundScore(value: number): number {
 }
 
 export function calcHealthScore(holdings: Holding[]): HealthScoreResult {
+  return calcHealthScoreWithSectors(holdings, classifySectorsSync(holdings));
+}
+
+export function calcHealthScoreWithSectors(
+  holdings: Holding[],
+  sectors: SectorAllocation[],
+): HealthScoreResult {
   if (holdings.length === 0) {
     return {
       score: 0,
@@ -34,7 +42,6 @@ export function calcHealthScore(holdings: Holding[]): HealthScoreResult {
   const lossCount = holdings.filter((holding) => holding.unrealisedGain < 0).length;
   const lossRatio = roundScore(100 - (lossCount / holdings.length) * 100);
 
-  const sectors = classifySectors(holdings);
   const hhi = sectors.reduce(
     (sum, sector) => sum + (sector.allocationPct / 100) ** 2,
     0,

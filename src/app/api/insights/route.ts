@@ -6,6 +6,10 @@ import {
 } from "../../../lib/finance/calculations";
 import { buildMutualFundPromptSection } from "../../../features/ai/promptBuilder";
 import { getAIProviderFromRequest, isAIProvider } from "../../../lib/ai/provider";
+import {
+  getEffectiveApiKey,
+  NO_API_KEY_CONFIGURED_MESSAGE,
+} from "@/lib/ai/user-api-keys";
 import type { Database, Json, MutualFundHoldingRow } from "../../../types/db";
 import type { Holding, MutualFundHolding, MutualFundTotals } from "../../../types/portfolio";
 import type { AIProvider } from "../../../lib/ai/provider";
@@ -96,7 +100,13 @@ export async function POST(request: Request): Promise<Response> {
     );
     const prompt = buildInsightPrompt(snapshot, metrics, mutualFundContext);
     const provider = getAIProviderFromRequest(request);
-    const insight = await generateInsight(prompt, provider);
+    const apiKey = await getEffectiveApiKey(userId, provider);
+
+    if (apiKey === undefined) {
+      return Response.json({ error: NO_API_KEY_CONFIGURED_MESSAGE }, { status: 400 });
+    }
+
+    const insight = await generateInsight(prompt, provider, apiKey);
     const { error: insertError } = await supabase.from("ai_insights").insert({
       snapshot_id: snapshot.id,
       user_id: userId,

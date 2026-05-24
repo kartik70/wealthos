@@ -12,6 +12,11 @@ import type {
 } from "../../types/portfolio";
 import { type AIProvider, isAIProvider } from "./provider";
 
+const SECTOR_CLASSIFICATION_PROMPT_PREFIX =
+  "Classify this Indian stock symbol into one sector:";
+const SECTOR_CLASSIFICATION_PROMPT_SUFFIX =
+  "Reply with just the sector name from: Power, Financials, Metals, Infrastructure, Consumer, Auto, ETFs, Technology, Other.";
+
 const INSIGHT_RESPONSE_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -55,17 +60,32 @@ let geminiClient: GoogleGenerativeAI | null = null;
 export async function generateInsight(
   prompt: string,
   provider: AIProvider = getDefaultAIProvider(),
+  apiKey?: string,
 ): Promise<InsightResponse> {
-  const text = await generateText(prompt, provider, 1000);
+  const text = await generateText(prompt, provider, 1000, apiKey);
   return parseInsightResponse(stripCodeFences(text));
 }
 
 export async function generateDetailedInsight(
   prompt: string,
   provider: AIProvider = getDefaultAIProvider(),
+  apiKey?: string,
 ): Promise<DetailedInsightResponse> {
-  const text = await generateText(prompt, provider, 4000);
+  const text = await generateText(prompt, provider, 4000, apiKey);
   return parseDetailedInsightResponse(stripCodeFences(text));
+}
+
+export async function classifyIndianStockSector(
+  symbol: string,
+  apiKey?: string,
+): Promise<string> {
+  const text = await generateWithAnthropic(
+    `${SECTOR_CLASSIFICATION_PROMPT_PREFIX} ${symbol}. ${SECTOR_CLASSIFICATION_PROMPT_SUFFIX}`,
+    20,
+    apiKey,
+  );
+
+  return text.replace(/[."']/g, "").trim();
 }
 
 function getDefaultAIProvider(): AIProvider {
@@ -86,26 +106,32 @@ async function generateText(
   prompt: string,
   provider: AIProvider,
   maxTokens: number,
+  apiKey?: string,
 ): Promise<string> {
   if (provider === "gemini") {
-    return generateWithGemini(prompt, maxTokens);
+    return generateWithGemini(prompt, maxTokens, apiKey);
   }
 
-  return generateWithAnthropic(prompt, maxTokens);
+  return generateWithAnthropic(prompt, maxTokens, apiKey);
 }
 
-async function generateWithAnthropic(prompt: string, maxTokens: number): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+async function generateWithAnthropic(
+  prompt: string,
+  maxTokens: number,
+  apiKey?: string,
+): Promise<string> {
+  const resolvedApiKey = apiKey ?? process.env.ANTHROPIC_API_KEY;
 
-  if (apiKey === undefined || apiKey.trim() === "") {
+  if (resolvedApiKey === undefined || resolvedApiKey.trim() === "") {
     throw new Error("Missing ANTHROPIC_API_KEY");
   }
 
-  if (anthropicClient === null) {
-    anthropicClient = new Anthropic({ apiKey });
-  }
+  const client =
+    apiKey === undefined
+      ? (anthropicClient ??= new Anthropic({ apiKey: resolvedApiKey }))
+      : new Anthropic({ apiKey: resolvedApiKey });
 
-  const response = await anthropicClient.messages.create({
+  const response = await client.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: maxTokens,
     messages: [{ role: "user", content: prompt }],
@@ -124,18 +150,23 @@ async function generateWithAnthropic(prompt: string, maxTokens: number): Promise
   return text;
 }
 
-async function generateWithGemini(prompt: string, maxTokens: number): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
+async function generateWithGemini(
+  prompt: string,
+  maxTokens: number,
+  apiKey?: string,
+): Promise<string> {
+  const resolvedApiKey = apiKey ?? process.env.GEMINI_API_KEY;
 
-  if (apiKey === undefined || apiKey.trim() === "") {
+  if (resolvedApiKey === undefined || resolvedApiKey.trim() === "") {
     throw new Error("Missing GEMINI_API_KEY");
   }
 
-  if (geminiClient === null) {
-    geminiClient = new GoogleGenerativeAI(apiKey);
-  }
+  const client =
+    apiKey === undefined
+      ? (geminiClient ??= new GoogleGenerativeAI(resolvedApiKey))
+      : new GoogleGenerativeAI(resolvedApiKey);
 
-  const model = geminiClient.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = client.getGenerativeModel({ model: "gemini-2.0-flash" });
   const response = await model.generateContent({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
@@ -150,6 +181,141 @@ async function generateWithGemini(prompt: string, maxTokens: number): Promise<st
   }
 
   return text;
+}
+
+export interface AdvisorChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export async function streamAdvisorResponse({
+  provider,
+  apiKey,
+  systemPrompt,
+  conversationHistory,
+  userMessage,
+  onDelta,
+}: {
+  provider: AIProvider;
+  apiKey?: string;
+  systemPrompt: string;
+  conversationHistory: AdvisorChatMessage[];
+  userMessage: string;
+  onDelta: (text: string) => void;
+}): Promise<string> {
+  if (provider === "gemini") {
+    return streamAdvisorGemini({
+      apiKey,
+      systemPrompt,
+      conversationHistory,
+      userMessage,
+      onDelta,
+    });
+  }
+
+  return streamAdvisorAnthropic({
+    apiKey,
+    systemPrompt,
+    conversationHistory,
+    userMessage,
+    onDelta,
+  });
+}
+
+async function streamAdvisorAnthropic({
+  apiKey,
+  systemPrompt,
+  conversationHistory,
+  userMessage,
+  onDelta,
+}: {
+  apiKey?: string;
+  systemPrompt: string;
+  conversationHistory: AdvisorChatMessage[];
+  userMessage: string;
+  onDelta: (text: string) => void;
+}): Promise<string> {
+  const resolvedApiKey = apiKey ?? process.env.ANTHROPIC_API_KEY;
+
+  if (resolvedApiKey === undefined || resolvedApiKey.trim() === "") {
+    throw new Error("Missing ANTHROPIC_API_KEY");
+  }
+
+  const historyWindow = conversationHistory.slice(-10);
+  const client = new Anthropic({ apiKey: resolvedApiKey });
+  const messages: Anthropic.MessageParam[] = [
+    ...historyWindow.map((message) => ({
+      role: message.role,
+      content: message.content,
+    })),
+    { role: "user", content: userMessage },
+  ];
+
+  const stream = client.messages.stream({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 800,
+    system: systemPrompt,
+    messages,
+  });
+
+  let fullText = "";
+
+  for await (const chunk of stream) {
+    if (
+      chunk.type === "content_block_delta" &&
+      chunk.delta.type === "text_delta"
+    ) {
+      fullText += chunk.delta.text;
+      onDelta(chunk.delta.text);
+    }
+  }
+
+  return fullText;
+}
+
+async function streamAdvisorGemini({
+  apiKey,
+  systemPrompt,
+  conversationHistory,
+  userMessage,
+  onDelta,
+}: {
+  apiKey?: string;
+  systemPrompt: string;
+  conversationHistory: AdvisorChatMessage[];
+  userMessage: string;
+  onDelta: (text: string) => void;
+}): Promise<string> {
+  const resolvedApiKey = apiKey ?? process.env.GEMINI_API_KEY;
+
+  if (resolvedApiKey === undefined || resolvedApiKey.trim() === "") {
+    throw new Error("Missing GEMINI_API_KEY");
+  }
+
+  const gemini = new GoogleGenerativeAI(resolvedApiKey);
+  const model = gemini.getGenerativeModel({
+    model: "gemini-2.0-flash",
+    systemInstruction: systemPrompt,
+  });
+
+  const history = conversationHistory.map((message) => ({
+    role: message.role === "assistant" ? "model" : "user",
+    parts: [{ text: message.content }],
+  }));
+
+  const chat = model.startChat({ history });
+  const result = await chat.sendMessageStream(userMessage);
+  let fullText = "";
+
+  for await (const chunk of result.stream) {
+    const text = chunk.text();
+    if (text) {
+      fullText += text;
+      onDelta(text);
+    }
+  }
+
+  return fullText;
 }
 
 function stripCodeFences(text: string): string {
