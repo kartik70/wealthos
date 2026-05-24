@@ -7,15 +7,18 @@ import {
   Gauge,
   Landmark,
   Lightbulb,
+  LogOut,
   Settings,
   Target,
   Timeline,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
 
 import { Button } from "@/components/ui/button";
+import { createSupabaseBrowserClient } from "@/lib/db/supabase";
 import { cn } from "@/lib/utils";
 
 interface NavItem {
@@ -39,8 +42,46 @@ interface SidebarProps {
   onNavigate?: () => void;
 }
 
+function getInitials(email: string | undefined): string {
+  if (email === undefined || email === "") {
+    return "?";
+  }
+
+  const localPart = email.split("@")[0] ?? "";
+  const parts = localPart.split(/[._-]/).filter(Boolean);
+
+  if (parts.length >= 2) {
+    return `${parts[0]?.[0] ?? ""}${parts[1]?.[0] ?? ""}`.toUpperCase();
+  }
+
+  return localPart.slice(0, 2).toUpperCase();
+}
+
 export function Sidebar({ onImportCsv, onNavigate }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  useEffect(() => {
+    const supabase = createSupabaseBrowserClient();
+
+    void supabase.auth.getUser().then(({ data: { user } }) => {
+      setUserEmail(user?.email ?? null);
+    });
+  }, []);
+
+  async function signOut() {
+    setIsSigningOut(true);
+    const supabase = createSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
+
+  const displayName =
+    userEmail === null ? "Account" : (userEmail.split("@")[0] ?? "Account");
+  const initials = getInitials(userEmail ?? undefined);
 
   return (
     <aside className="flex h-full w-64 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
@@ -90,16 +131,27 @@ export function Sidebar({ onImportCsv, onNavigate }: SidebarProps) {
         })}
       </nav>
 
-      <div className="border-t p-3">
+      <div className="space-y-2 border-t p-3">
         <div className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-2.5 py-2">
           <div className="grid size-8 place-items-center rounded-full bg-foreground text-xs font-semibold text-background">
-            RD
+            {initials}
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-foreground">Redeye</p>
-            <p className="truncate text-xs text-muted-foreground">Investor</p>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-foreground">{displayName}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {userEmail ?? "Signed in"}
+            </p>
           </div>
         </div>
+        <Button
+          variant="outline"
+          className="w-full justify-start"
+          onClick={() => void signOut()}
+          disabled={isSigningOut}
+        >
+          <LogOut className="size-4" aria-hidden="true" />
+          {isSigningOut ? "Signing out…" : "Sign out"}
+        </Button>
       </div>
     </aside>
   );

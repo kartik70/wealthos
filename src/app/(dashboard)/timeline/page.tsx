@@ -1,11 +1,12 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { HoldingsTable } from "@/components/portfolio/HoldingsTable";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { calcSnapshotDiff } from "@/lib/finance/diff";
 import { cn } from "@/lib/utils";
 import type { PortfolioSnapshot } from "@/types/portfolio";
@@ -107,6 +108,8 @@ function getSnapshotPills(current: PortfolioSnapshot, previous: PortfolioSnapsho
 export default function TimelinePage() {
   const [snapshots, setSnapshots] = useState<PortfolioSnapshot[]>([]);
   const [expandedSnapshotId, setExpandedSnapshotId] = useState<string | null>(null);
+  const [pendingDeleteSnapshot, setPendingDeleteSnapshot] = useState<PortfolioSnapshot | null>(null);
+  const [deletingSnapshotId, setDeletingSnapshotId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -131,6 +134,38 @@ export default function TimelinePage() {
 
     fetchSnapshots();
   }, []);
+
+  async function handleDeleteSnapshot() {
+    if (pendingDeleteSnapshot === null) {
+      return;
+    }
+
+    const snapshotId = pendingDeleteSnapshot.id;
+    setDeletingSnapshotId(snapshotId);
+
+    try {
+      const response = await fetch(`/api/snapshots/${snapshotId}`, {
+        method: "DELETE",
+      });
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to delete snapshot");
+      }
+
+      setSnapshots((current) => current.filter((snapshot) => snapshot.id !== snapshotId));
+      setExpandedSnapshotId((current) => (current === snapshotId ? null : current));
+      setPendingDeleteSnapshot(null);
+      window.dispatchEvent(new Event("wealthos:snapshot-updated"));
+      toast.success("Snapshot deleted");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to delete snapshot";
+      toast.error(message);
+    } finally {
+      setDeletingSnapshotId(null);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -169,6 +204,48 @@ export default function TimelinePage() {
         <p className="mt-1 text-sm text-muted-foreground">Portfolio snapshots and changes</p>
       </div>
 
+      {pendingDeleteSnapshot !== null ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+            onClick={() => setPendingDeleteSnapshot(null)}
+            aria-label="Close confirmation"
+            disabled={deletingSnapshotId !== null}
+          />
+
+          <div className="relative z-10 w-full max-w-md rounded-xl border bg-card p-6 shadow-xl">
+            <h2 className="text-lg font-semibold tracking-tight">Delete snapshot?</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This will permanently delete the snapshot from{" "}
+              <span className="font-medium text-foreground">
+                {dateFormatter.format(new Date(pendingDeleteSnapshot.createdAt))}
+              </span>
+              , including holdings, insights, and embeddings. This cannot be undone.
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPendingDeleteSnapshot(null)}
+                disabled={deletingSnapshotId !== null}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => void handleDeleteSnapshot()}
+                disabled={deletingSnapshotId !== null}
+              >
+                {deletingSnapshotId !== null ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="relative ml-2 border-l border-border/70 pl-6">
         {snapshots.map((snapshot, index) => {
           const isFirst = index === snapshots.length - 1;
@@ -183,12 +260,14 @@ export default function TimelinePage() {
               <span className="absolute -left-[1.85rem] top-4 size-3 rounded-full border-2 border-background bg-foreground/70" />
 
               <div className="rounded-xl border border-border/70 bg-card/60">
-                <button
-                  onClick={() =>
-                    setExpandedSnapshotId(isExpanded ? null : snapshot.id)
-                  }
-                  className="w-full px-4 py-4 text-left transition-colors hover:bg-muted/30"
-                >
+                <div className="flex items-start gap-1 px-4 py-4">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedSnapshotId(isExpanded ? null : snapshot.id)
+                    }
+                    className="min-w-0 flex-1 text-left transition-colors hover:bg-muted/30 rounded-md -m-2 p-2"
+                  >
                   <div className="flex flex-col gap-3">
                     <div className="flex items-start justify-between gap-4">
                       <p className="font-mono text-sm text-muted-foreground">
@@ -236,7 +315,20 @@ export default function TimelinePage() {
                       />
                     </div>
                   </div>
-                </button>
+                  </button>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+                    aria-label={`Delete snapshot from ${dateFormatter.format(new Date(snapshot.createdAt))}`}
+                    onClick={() => setPendingDeleteSnapshot(snapshot)}
+                    disabled={deletingSnapshotId === snapshot.id}
+                  >
+                    <Trash2 className="size-4" aria-hidden="true" />
+                  </Button>
+                </div>
 
                 {isExpanded && (
                   <div className="border-t px-4 py-4">

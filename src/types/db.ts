@@ -129,7 +129,20 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      match_snapshot_embeddings: {
+        Args: {
+          query_embedding: number[];
+          match_user_id: string;
+          match_count: number;
+        };
+        Returns: Array<{
+          content: string;
+          chunk_type: string;
+          created_at: string;
+        }>;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

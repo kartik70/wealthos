@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2, Target } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -8,9 +8,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -63,6 +60,7 @@ export default function GoalsPage() {
   const [goals, setGoals] = useState<GoalRow[]>([]);
   const [currentPortfolioValue, setCurrentPortfolioValue] = useState(0);
   const [draft, setDraft] = useState<GoalDraft>(DEFAULT_DRAFT);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [deletingGoalId, setDeletingGoalId] = useState<string | null>(null);
@@ -121,6 +119,7 @@ export default function GoalsPage() {
       }
 
       setDraft(DEFAULT_DRAFT);
+      setIsDrawerOpen(false);
       await fetchGoals();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create goal");
@@ -150,83 +149,15 @@ export default function GoalsPage() {
 
   return (
     <div className="animate-in fade-in-0 duration-300 flex flex-col gap-5">
-      <div className="flex flex-col gap-1 border-b pb-4">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">Goals</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Corpus-only goal tracking. SIP projections will be added with Groww CSV support.
-        </p>
+      <div className="flex items-start justify-between gap-4 border-b pb-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="font-heading text-2xl font-semibold tracking-tight">Goals</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Corpus-only goal tracking. SIP projections will be added with Groww CSV support.
+          </p>
+        </div>
+        <Button onClick={() => setIsDrawerOpen(true)}>Add Goal</Button>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Add Goal</CardTitle>
-          <CardDescription>Create a target corpus goal to track from your current portfolio value.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" onSubmit={handleCreateGoal}>
-            <div className="space-y-1.5 lg:col-span-2">
-              <Label htmlFor="goal-name">Goal name</Label>
-              <Input
-                id="goal-name"
-                value={draft.name}
-                onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-                placeholder="Retirement corpus"
-                required
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="goal-target">Target corpus (₹)</Label>
-              <Input
-                id="goal-target"
-                type="number"
-                min="1"
-                value={draft.targetCorpus}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, targetCorpus: event.target.value }))}
-                placeholder="10000000"
-                required
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="goal-date">Target date</Label>
-              <Input
-                id="goal-date"
-                type="date"
-                value={draft.targetDate}
-                onChange={(event) => setDraft((current) => ({ ...current, targetDate: event.target.value }))}
-                required
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="goal-return">Expected return (%)</Label>
-              <Input
-                id="goal-return"
-                type="number"
-                step="0.1"
-                value={draft.expectedReturn}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, expectedReturn: event.target.value }))}
-                placeholder="12"
-              />
-            </div>
-
-            <div className="flex items-end sm:col-span-2 lg:col-span-3">
-              <p className="text-xs text-muted-foreground">
-                Progress is measured against your latest portfolio snapshot value.
-              </p>
-            </div>
-
-            <div className="flex items-end justify-end">
-              <Button type="submit" disabled={isSaving}>
-                {isSaving ? "Saving..." : "Create goal"}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
 
       {error !== null && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -235,7 +166,7 @@ export default function GoalsPage() {
       )}
 
       {isLoading ? (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3">
           {Array.from({ length: 3 }, (_, index) => (
             <Card key={index}>
               <CardContent className="space-y-3 py-4">
@@ -248,20 +179,17 @@ export default function GoalsPage() {
         </div>
       ) : sortedGoals.length === 0 ? (
         <Card className="border border-dashed">
-          <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
-            <div className="grid size-12 place-items-center rounded-full bg-muted">
-              <Target className="size-5 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="font-medium">No goals yet</p>
-              <p className="text-sm text-muted-foreground">
-                Add your first corpus goal to start tracking progress.
-              </p>
-            </div>
+          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
+            <span className="text-5xl text-muted-foreground">◎</span>
+            <h2 className="text-xl font-medium">No goals set</h2>
+            <p className="text-sm text-muted-foreground">
+              Define a target corpus to start tracking your progress
+            </p>
+            <Button onClick={() => setIsDrawerOpen(true)}>Add Goal</Button>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3">
           {sortedGoals.map((goal) => {
             const targetCorpus = Number(goal.target_corpus);
             const expectedReturn = Number(goal.expected_return ?? 12);
@@ -286,16 +214,43 @@ export default function GoalsPage() {
 
             return (
               <Card key={goal.id}>
-                <CardHeader>
+                <CardContent className="space-y-4 py-4">
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <CardTitle>{goal.name}</CardTitle>
-                      <CardDescription>
-                        Target date: {dateFormatter.format(targetDate)}
-                      </CardDescription>
+                    <div className="grid flex-1 gap-5 lg:grid-cols-[1.4fr_auto_1fr] lg:items-center">
+                      <div className="space-y-2">
+                        <p className="text-lg font-medium">{goal.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Target date: {dateFormatter.format(targetDate)}
+                        </p>
+                        <p className="font-mono text-2xl font-light">
+                          {currencyFormatter.format(targetCorpus)}
+                        </p>
+                      </div>
+
+                      <ProgressRing progress={progress} status={status} />
+
+                      <dl className="grid gap-2 font-mono text-sm">
+                        <StatRow
+                          label="Projected value"
+                          value={currencyFormatter.format(projectedValue)}
+                        />
+                        <StatRow
+                          label="Gap"
+                          value={`${gap <= 0 ? "Surplus" : "Shortfall"} ${currencyFormatter.format(Math.abs(gap))}`}
+                          valueClassName={gap <= 0 ? "text-emerald-500" : "text-rose-500"}
+                        />
+                        <StatRow
+                          label="Years to goal"
+                          value={
+                            Number.isFinite(yearsFromCurrentValue)
+                              ? `${percentFormatter.format(yearsFromCurrentValue)} years`
+                              : "Not reachable"
+                          }
+                        />
+                      </dl>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <StatusBadge status={status} />
+
+                    <div>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -307,59 +262,41 @@ export default function GoalsPage() {
                       </Button>
                     </div>
                   </div>
-                </CardHeader>
 
-                <CardContent className="space-y-4">
-                  <div>
-                    <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Progress</span>
-                      <span>{percentFormatter.format(progress)}%</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-muted">
+                  <div className="space-y-2 border-t pt-3">
+                    <div className="h-1 overflow-hidden rounded-full bg-muted">
                       <div
                         className={cn(
                           "h-full rounded-full transition-all",
                           status === "ON TRACK" && "bg-emerald-500",
                           status === "NEEDS ATTENTION" && "bg-amber-500",
-                          status === "OFF TRACK" && "bg-red-500",
+                          status === "OFF TRACK" && "bg-rose-500",
                         )}
                         style={{ width: `${progress}%` }}
                       />
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {currencyFormatter.format(currentPortfolioValue)} of {currencyFormatter.format(targetCorpus)}
-                    </p>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>
+                        {currencyFormatter.format(currentPortfolioValue)} of {currencyFormatter.format(targetCorpus)}
+                      </span>
+                      <StatusBadge status={status} />
+                    </div>
                   </div>
-
-                  <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                    <div>
-                      <dt className="text-xs text-muted-foreground">
-                        Projected at {percentFormatter.format(expectedReturn)}% by target date
-                      </dt>
-                      <dd className="font-medium">{currencyFormatter.format(projectedValue)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-muted-foreground">Gap</dt>
-                      <dd className={cn("font-medium", gap <= 0 ? "text-emerald-700" : "text-red-700")}>
-                        {gap <= 0 ? "Surplus " : "Shortfall "}
-                        {currencyFormatter.format(Math.abs(gap))}
-                      </dd>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <dt className="text-xs text-muted-foreground">Years to goal (from current value)</dt>
-                      <dd className="font-medium">
-                        {Number.isFinite(yearsFromCurrentValue)
-                          ? `${percentFormatter.format(yearsFromCurrentValue)} years`
-                          : "Not reachable with current assumptions"}
-                      </dd>
-                    </div>
-                  </dl>
                 </CardContent>
               </Card>
             );
           })}
         </div>
       )}
+
+      <GoalDrawer
+        open={isDrawerOpen}
+        draft={draft}
+        isSaving={isSaving}
+        onClose={() => setIsDrawerOpen(false)}
+        onSubmit={handleCreateGoal}
+        onDraftChange={setDraft}
+      />
     </div>
   );
 }
@@ -379,14 +316,177 @@ function getGoalStatus(projectedValue: number, targetCorpus: number): GoalStatus
 function StatusBadge({ status }: { status: GoalStatus }) {
   return (
     <Badge
-      variant="secondary"
+      variant="outline"
       className={cn(
-        status === "ON TRACK" && "bg-emerald-100 text-emerald-800 hover:bg-emerald-100",
-        status === "NEEDS ATTENTION" && "bg-amber-100 text-amber-800 hover:bg-amber-100",
-        status === "OFF TRACK" && "bg-red-100 text-red-800 hover:bg-red-100",
+        "font-medium",
+        status === "ON TRACK" && "border-emerald-500 text-emerald-500",
+        status === "NEEDS ATTENTION" && "border-amber-500 text-amber-500",
+        status === "OFF TRACK" && "border-rose-500 text-rose-500",
       )}
     >
       {status}
     </Badge>
+  );
+}
+
+function ProgressRing({ progress, status }: { progress: number; status: GoalStatus }) {
+  const clamped = Math.max(0, Math.min(100, progress));
+  const radius = 36;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (clamped / 100) * circumference;
+
+  return (
+    <div className="relative grid place-items-center">
+      <svg width="96" height="96" viewBox="0 0 96 96" className="-rotate-90">
+        <circle
+          cx="48"
+          cy="48"
+          r={radius}
+          stroke="currentColor"
+          strokeWidth="8"
+          className="text-muted"
+          fill="none"
+        />
+        <circle
+          cx="48"
+          cy="48"
+          r={radius}
+          stroke="currentColor"
+          strokeWidth="8"
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          className={cn(
+            status === "ON TRACK" && "text-emerald-500",
+            status === "NEEDS ATTENTION" && "text-amber-500",
+            status === "OFF TRACK" && "text-rose-500",
+          )}
+        />
+      </svg>
+      <div className="pointer-events-none absolute text-center">
+        <p className="font-mono text-lg font-medium">{percentFormatter.format(clamped)}%</p>
+      </div>
+    </div>
+  );
+}
+
+function StatRow({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="space-y-0.5">
+      <dt className="text-[11px] text-muted-foreground">{label}</dt>
+      <dd className={cn("text-sm", valueClassName)}>{value}</dd>
+    </div>
+  );
+}
+
+function GoalDrawer({
+  open,
+  draft,
+  isSaving,
+  onClose,
+  onSubmit,
+  onDraftChange,
+}: {
+  open: boolean;
+  draft: GoalDraft;
+  isSaving: boolean;
+  onClose: () => void;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
+  onDraftChange: React.Dispatch<React.SetStateAction<GoalDraft>>;
+}) {
+  return (
+    <div className={cn("fixed inset-0 z-50", open ? "pointer-events-auto" : "pointer-events-none")}>
+      <button
+        type="button"
+        className={cn(
+          "absolute inset-0 bg-background/60 transition-opacity",
+          open ? "opacity-100" : "opacity-0",
+        )}
+        aria-label="Close add goal drawer"
+        onClick={onClose}
+      />
+
+      <aside
+        className={cn(
+          "absolute right-0 top-0 h-full w-full max-w-md border-l bg-background p-5 shadow-xl transition-transform",
+          open ? "translate-x-0" : "translate-x-full",
+        )}
+      >
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-medium">Add Goal</h2>
+            <p className="text-sm text-muted-foreground">Create a corpus target with expected return assumptions.</p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
+        </div>
+
+        <form className="space-y-4" onSubmit={(event) => void onSubmit(event)}>
+          <div className="space-y-1.5">
+            <Label htmlFor="goal-name">Goal name</Label>
+            <Input
+              id="goal-name"
+              value={draft.name}
+              onChange={(event) => onDraftChange((current) => ({ ...current, name: event.target.value }))}
+              placeholder="Retirement corpus"
+              required
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="goal-target">Target corpus (₹)</Label>
+            <Input
+              id="goal-target"
+              type="number"
+              min="1"
+              value={draft.targetCorpus}
+              onChange={(event) => onDraftChange((current) => ({ ...current, targetCorpus: event.target.value }))}
+              placeholder="10000000"
+              required
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="goal-date">Target date</Label>
+            <Input
+              id="goal-date"
+              type="date"
+              value={draft.targetDate}
+              onChange={(event) => onDraftChange((current) => ({ ...current, targetDate: event.target.value }))}
+              required
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="goal-return">Expected return (%)</Label>
+            <Input
+              id="goal-return"
+              type="number"
+              step="0.1"
+              value={draft.expectedReturn}
+              onChange={(event) => onDraftChange((current) => ({ ...current, expectedReturn: event.target.value }))}
+              placeholder="12"
+            />
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Progress is measured against your latest portfolio snapshot value.
+          </p>
+
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+            <Button type="submit" disabled={isSaving}>{isSaving ? "Saving..." : "Create goal"}</Button>
+          </div>
+        </form>
+      </aside>
+    </div>
   );
 }

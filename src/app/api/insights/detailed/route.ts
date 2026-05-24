@@ -1,11 +1,11 @@
 import { generateDetailedInsight } from "@/lib/ai/client";
-import { createSupabaseServerClient } from "@/lib/db/supabase";
+import { requireAuth } from "@/lib/db/require-auth";
 import { calcAllocationPct } from "@/lib/finance/calculations";
 import { calcHealthScore } from "@/lib/finance/health";
 import { classifySectors } from "@/lib/finance/sectors";
 import { calcTaxSummary } from "@/lib/finance/tax";
 import { buildDetailedInsightPrompt } from "@/features/ai/promptBuilder";
-import { isAIProvider } from "@/lib/ai/provider";
+import { getAIProviderFromRequest, isAIProvider } from "@/lib/ai/provider";
 import type { Database, Json } from "@/types/db";
 import type { AIProvider } from "@/lib/ai/provider";
 import type { DetailedInsightResponse, Holding, PortfolioSnapshot } from "@/types/portfolio";
@@ -40,7 +40,12 @@ export async function GET(request: Request): Promise<Response> {
       );
     }
 
-    const supabase = await createSupabaseServerClient();
+    const auth = await requireAuth();
+    if ("error" in auth) {
+      return auth.error;
+    }
+    const { supabase } = auth.data;
+
     const { data: row, error } = await supabase
       .from("ai_insights")
       .select("id,snapshot_id,user_id,created_at,summary,recommendations,alerts,trigger")
@@ -94,7 +99,11 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const supabase = await createSupabaseServerClient();
+    const auth = await requireAuth();
+    if ("error" in auth) {
+      return auth.error;
+    }
+    const { supabase, userId } = auth.data;
 
     const { data: snapshot, error: snapshotError } = await supabase
       .from("portfolio_snapshots")
@@ -110,6 +119,10 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     if (snapshot === null) {
+      return Response.json({ error: "Portfolio snapshot not found" }, { status: 404 });
+    }
+
+    if (snapshot.user_id !== userId) {
       return Response.json({ error: "Portfolio snapshot not found" }, { status: 404 });
     }
 
@@ -147,7 +160,8 @@ export async function POST(request: Request): Promise<Response> {
       taxSummary,
     );
 
-    const insight = await generateDetailedInsight(prompt, body.provider);
+    const provider = getAIProviderFromRequest(request);
+    const insight = await generateDetailedInsight(prompt, provider);
 
     const { error: insertError } = await supabase.from("ai_insights").insert({
       snapshot_id: snapshot.id,

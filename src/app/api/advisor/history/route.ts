@@ -1,4 +1,4 @@
-import { createSupabaseAdminClient } from "../../../../lib/db/supabase";
+import { requireAuth } from "@/lib/db/require-auth";
 
 export const runtime = "nodejs";
 
@@ -10,8 +10,11 @@ interface HistoryMessage {
 }
 
 export async function GET(): Promise<Response> {
-  const userId = "local-dev-user";
-  const supabase = createSupabaseAdminClient();
+  const auth = await requireAuth();
+  if ("error" in auth) {
+    return auth.error;
+  }
+  const { supabase, userId } = auth.data;
 
   const { data, error } = await supabase
     .from("advisor_conversations")

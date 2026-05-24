@@ -1,4 +1,4 @@
-import { createSupabaseAdminClient } from "../../../../lib/db/supabase";
+import { requireAuth } from "@/lib/db/require-auth";
 import { embedSnapshot } from "../../../../lib/ai/embeddings";
 import { calcSnapshotDiff } from "../../../../lib/finance/diff";
 import type { Holding, PortfolioSnapshot } from "../../../../types/portfolio";
@@ -7,8 +7,11 @@ import type { HoldingRow, PortfolioSnapshotRow } from "../../../../types/db";
 export const runtime = "nodejs";
 
 export async function GET(): Promise<Response> {
-  const supabase = createSupabaseAdminClient();
-  const userId = "local-dev-user";
+  const auth = await requireAuth();
+  if ("error" in auth) {
+    return auth.error;
+  }
+  const { supabase, userId } = auth.data;
 
   const { data: snapshots, error: snapshotsError } = await supabase
     .from("portfolio_snapshots")

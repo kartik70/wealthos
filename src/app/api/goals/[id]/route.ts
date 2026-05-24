@@ -1,4 +1,4 @@
-import { createSupabaseAdminClient } from "@/lib/db/supabase";
+import { requireAuth } from "@/lib/db/require-auth";
 
 export const runtime = "nodejs";
 
@@ -16,8 +16,11 @@ export async function DELETE(
     return Response.json({ error: "Goal id is required" }, { status: 400 });
   }
 
-  const supabase = createSupabaseAdminClient();
-  const userId = "local-dev-user";
+  const auth = await requireAuth();
+  if ("error" in auth) {
+    return auth.error;
+  }
+  const { supabase, userId } = auth.data;
 
   const { error } = await supabase
     .from("goals")

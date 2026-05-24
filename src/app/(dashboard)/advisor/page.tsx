@@ -5,6 +5,7 @@ import { ArrowUp, Bot, RotateCcw, Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 import { Button } from "@/components/ui/button";
+import { withAIProviderHeaders } from "@/lib/ai/provider";
 import { cn } from "@/lib/utils";
 import { useAdvisorStore, type ChatMessage } from "@/stores/advisorStore";
 
@@ -120,7 +121,7 @@ export default function AdvisorPage() {
       try {
         const response = await fetch("/api/advisor/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: withAIProviderHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ message: trimmed, conversationHistory }),
         });
 

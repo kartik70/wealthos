@@ -1,10 +1,10 @@
 import { generateInsight } from "../../../lib/ai/client";
-import { createSupabaseServerClient } from "../../../lib/db/supabase";
+import { requireAuth } from "@/lib/db/require-auth";
 import {
   calcAllocationPct,
   calcPortfolioTotals,
 } from "../../../lib/finance/calculations";
-import { isAIProvider } from "../../../lib/ai/provider";
+import { getAIProviderFromRequest, isAIProvider } from "../../../lib/ai/provider";
 import type { Database, Json } from "../../../types/db";
 import type { Holding } from "../../../types/portfolio";
 import type { AIProvider } from "../../../lib/ai/provider";
@@ -38,7 +38,12 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const supabase = await createSupabaseServerClient();
+    const auth = await requireAuth();
+    if ("error" in auth) {
+      return auth.error;
+    }
+    const { supabase, userId } = auth.data;
+
     const { data: snapshot, error: snapshotError } = await supabase
       .from("portfolio_snapshots")
       .select("id,user_id,created_at,total_value,total_cost,total_gain,total_gain_pct,source,raw_data")
@@ -53,6 +58,10 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     if (snapshot === null) {
+      return Response.json({ error: "Portfolio snapshot not found" }, { status: 404 });
+    }
+
+    if (snapshot.user_id !== userId) {
       return Response.json({ error: "Portfolio snapshot not found" }, { status: 404 });
     }
 
@@ -80,11 +89,11 @@ export async function POST(request: Request): Promise<Response> {
 
     const metrics = calculatePortfolioMetrics(holdings);
     const prompt = buildInsightPrompt(snapshot, metrics);
-    const provider = body.provider;
+    const provider = getAIProviderFromRequest(request);
     const insight = await generateInsight(prompt, provider);
     const { error: insertError } = await supabase.from("ai_insights").insert({
       snapshot_id: snapshot.id,
-      user_id: "local-dev-user",
+      user_id: userId,
       summary: insight.summary,
       recommendations: insight.recommendations as unknown as Json,
       alerts: insight.alerts as unknown as Json,

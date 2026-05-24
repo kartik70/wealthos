@@ -1,12 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-import { createSupabaseAdminClient } from "../../../../lib/db/supabase";
+import { requireAuth } from "@/lib/db/require-auth";
+import { createSupabaseServerClient } from "@/lib/db/supabase";
 import { retrieveRelevantContext } from "../../../../lib/ai/retrieval";
 import { buildAdvisorSystemPrompt } from "../../../../features/ai/advisorPromptBuilder";
 import type { PortfolioSnapshot } from "../../../../types/portfolio";
 import type { HoldingRow, PortfolioSnapshotRow } from "../../../../types/db";
-import { isAIProvider, type AIProvider } from "../../../../lib/ai/provider";
+import {
+  getAIProviderFromRequest,
+  type AIProvider,
+} from "../../../../lib/ai/provider";
 
 export const runtime = "nodejs";
 
@@ -36,12 +40,6 @@ const ADVISOR_SYSTEM_PROMPT = `Guardrails:
 - When data needed to answer is missing from context, keep the reply short and direct: state what data is missing and suggest uploading older CSVs from the Timeline page. Do not provide a bulleted list of workaround steps.
 - Do not use moralising or lecture-style caveats. Keep refusals and limitations brief, then redirect to actionable portfolio analysis the system can provide.`;
 
-function getProvider(): AIProvider {
-  const configured = process.env.AI_PROVIDER;
-  if (isAIProvider(configured)) return configured;
-  return "anthropic";
-}
-
 export async function POST(request: Request): Promise<Response> {
   let body: ChatRequest;
   try {
@@ -69,7 +67,11 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const userId = "local-dev-user";
+  const auth = await requireAuth();
+  if ("error" in auth) {
+    return auth.error;
+  }
+  const { supabase, userId } = auth.data;
 
   if (isRateLimited(userId)) {
     return Response.json(
@@ -78,11 +80,11 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const provider = getProvider();
+  const provider = getAIProviderFromRequest(request);
 
   const [retrievedContext, currentSnapshot] = await Promise.all([
     retrieveRelevantContext(sanitizedMessage, userId, 5),
-    fetchCurrentSnapshot(userId),
+    fetchCurrentSnapshot(supabase, userId),
   ]);
 
   const systemPrompt = buildGuardrailedSystemPrompt(retrievedContext, currentSnapshot);
@@ -108,7 +110,12 @@ export async function POST(request: Request): Promise<Response> {
           ? await streamGemini(systemPrompt, conversationHistory, sanitizedMessage, controller, encoder)
           : await streamAnthropic(systemPrompt, conversationHistory, sanitizedMessage, controller, encoder);
 
-        await saveConversationTurn(userId, sanitizedMessage, assistantResponse);
+        await saveConversationTurn(
+          supabase,
+          userId,
+          sanitizedMessage,
+          assistantResponse,
+        );
 
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`));
       } catch (err) {
@@ -257,11 +264,11 @@ async function streamGemini(
 }
 
 async function saveConversationTurn(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   userId: string,
   userMessage: string,
   assistantResponse: string,
 ): Promise<void> {
-  const supabase = createSupabaseAdminClient();
   const rows: ConversationInsert[] = [
     {
       user_id: userId,
@@ -282,8 +289,10 @@ async function saveConversationTurn(
   }
 }
 
-async function fetchCurrentSnapshot(userId: string): Promise<PortfolioSnapshot | null> {
-  const supabase = createSupabaseAdminClient();
+async function fetchCurrentSnapshot(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  userId: string,
+): Promise<PortfolioSnapshot | null> {
 
   const { data: snapshotRow } = await supabase
     .from("portfolio_snapshots")

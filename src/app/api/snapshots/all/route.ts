@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/db/supabase";
+import { requireAuth } from "@/lib/db/require-auth";
 import type { Holding, PortfolioSnapshot } from "@/types/portfolio";
 
 export const runtime = "nodejs";
@@ -7,10 +7,35 @@ interface AllSnapshotsResponse {
   snapshots: PortfolioSnapshot[];
 }
 
+type SnapshotWithHoldingsRow = {
+  id: string;
+  user_id: string;
+  total_value: number;
+  total_cost: number;
+  total_gain: number;
+  total_gain_pct: number;
+  source: string | null;
+  created_at: string;
+  holdings: Array<{
+    symbol: string;
+    name: string | null;
+    quantity: number;
+    avg_cost: number;
+    current_price: number;
+    current_value: number;
+    unrealised_gain: number;
+    unrealised_gain_pct: number;
+    allocation_pct: number;
+  }> | null;
+};
+
 export async function GET(): Promise<Response> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const userId = "local-dev-user";
+    const auth = await requireAuth();
+    if ("error" in auth) {
+      return auth.error;
+    }
+    const { supabase, userId } = auth.data;
 
     // Fetch all portfolio snapshots with their holdings ordered by created_at descending
     const { data: snapshots, error: snapshotsError } = await supabase
@@ -48,18 +73,9 @@ export async function GET(): Promise<Response> {
       );
     }
 
-    const snapshotList: PortfolioSnapshot[] = (snapshots || []).map((row) => {
-      const holdings = (row.holdings as Array<{
-        symbol: string;
-        name: string;
-        quantity: number;
-        avg_cost: number;
-        current_price: number;
-        current_value: number;
-        unrealised_gain: number;
-        unrealised_gain_pct: number;
-        allocation_pct: number;
-      }>) || [];
+    const rows = (snapshots ?? []) as unknown as SnapshotWithHoldingsRow[];
+    const snapshotList: PortfolioSnapshot[] = rows.map((row) => {
+      const holdings = row.holdings ?? [];
 
       return {
         id: row.id,
@@ -72,7 +88,7 @@ export async function GET(): Promise<Response> {
         source: row.source as "kite" | "groww" | "manual",
         holdings: holdings.map((h) => ({
           symbol: h.symbol,
-          name: h.name,
+          name: h.name ?? h.symbol,
           quantity: h.quantity,
           avgCost: h.avg_cost,
           currentPrice: h.current_price,

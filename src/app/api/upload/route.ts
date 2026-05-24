@@ -1,4 +1,4 @@
-import {  createSupabaseServerClient } from "../../../lib/db/supabase";
+import { requireAuth } from "@/lib/db/require-auth";
 import {
   calcAllocationPct,
   calcPortfolioTotals,
@@ -40,8 +40,11 @@ export async function POST(request: Request): Promise<Response> {
 
     const holdings = calcAllocationPct(parsedHoldings);
     const totals = calcPortfolioTotals(holdings);
-    const supabase = await createSupabaseServerClient();
-    const userId = "local-dev-user";
+    const auth = await requireAuth();
+    if ("error" in auth) {
+      return auth.error;
+    }
+    const { supabase, userId } = auth.data;
 
     // When checking for duplicate date, compare in IST.
     const reportDate = new Date(formData.get("reportDate") as string);

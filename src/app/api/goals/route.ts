@@ -1,4 +1,4 @@
-import { createSupabaseAdminClient } from "@/lib/db/supabase";
+import { requireAuth } from "@/lib/db/require-auth";
 import type { GoalRow } from "@/types/db";
 
 export const runtime = "nodejs";
@@ -16,8 +16,11 @@ interface CreateGoalRequest {
 }
 
 export async function GET(): Promise<Response> {
-  const supabase = createSupabaseAdminClient();
-  const userId = "local-dev-user";
+  const auth = await requireAuth();
+  if ("error" in auth) {
+    return auth.error;
+  }
+  const { supabase, userId } = auth.data;
 
   const [{ data: goals, error: goalsError }, { data: snapshot, error: snapshotError }] =
     await Promise.all([
@@ -98,8 +101,11 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const supabase = createSupabaseAdminClient();
-  const userId = "local-dev-user";
+  const auth = await requireAuth();
+  if ("error" in auth) {
+    return auth.error;
+  }
+  const { supabase, userId } = auth.data;
 
   const { data, error } = await supabase
     .from("goals")

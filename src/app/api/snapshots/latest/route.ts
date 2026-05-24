@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from "@/lib/db/supabase";
+import { requireAuth } from "@/lib/db/require-auth";
 import type { Database } from "@/types/db";
 import type { Holding, PortfolioTotals, InsightResponse } from "@/types/portfolio";
 
@@ -17,8 +17,11 @@ interface LatestSnapshotResponse {
 
 export async function GET(): Promise<Response> {
   try {
-    const supabase = await createSupabaseServerClient();
-    const userId = "local-dev-user";
+    const auth = await requireAuth();
+    if ("error" in auth) {
+      return auth.error;
+    }
+    const { supabase, userId } = auth.data;
 
     // Fetch the most recent portfolio snapshot with its holdings
     const { data: snapshot, error: snapshotError } = await supabase
