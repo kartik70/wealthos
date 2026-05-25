@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/db";
 
 const PROTECTED_PREFIXES = [
+  "/dashboard",
   "/portfolio",
   "/insights",
   "/timeline",
@@ -13,10 +14,6 @@ const PROTECTED_PREFIXES = [
 ];
 
 function isProtectedPath(pathname: string): boolean {
-  if (pathname === "/") {
-    return true;
-  }
-
   return PROTECTED_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
@@ -63,7 +60,7 @@ export async function middleware(request: NextRequest) {
 
   if (user && pathname === "/login") {
     const homeUrl = request.nextUrl.clone();
-    homeUrl.pathname = "/";
+    homeUrl.pathname = "/dashboard";
     return NextResponse.redirect(homeUrl);
   }
 

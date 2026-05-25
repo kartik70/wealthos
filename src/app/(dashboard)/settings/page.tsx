@@ -14,7 +14,6 @@ import {
   setStoredAIProvider,
   type AIProvider,
 } from "@/lib/ai/provider";
-import { cn } from "@/lib/utils";
 import type { PortfolioSnapshot } from "@/types/portfolio";
 
 interface AllSnapshotsResponse {
@@ -294,9 +293,7 @@ export default function SettingsPage() {
       </div>
 
       <section className="rounded-lg border border-border bg-card p-6">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          Account
-        </h2>
+        <SectionHeader label="Account" />
 
         <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
@@ -308,35 +305,43 @@ export default function SettingsPage() {
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="grid size-12 place-items-center rounded-full bg-foreground text-sm font-semibold text-background">
+              <div
+                className="grid size-12 place-items-center rounded-full font-mono text-sm"
+                style={{
+                  background: "#1d3a5f",
+                  color: "#3b82f6",
+                  fontWeight: 500,
+                }}
+              >
                 {initials}
               </div>
             )}
             <div>
-              <p className="text-sm font-medium text-foreground">
+              <p className="text-sm font-medium text-white">
                 {email ?? "Signed in"}
               </p>
-              <p className="text-xs text-muted-foreground">Google account</p>
+              <p className="text-xs" style={{ color: "#4a5568" }}>Google account</p>
             </div>
           </div>
 
-          <Button
-            variant="outline"
+          <button
+            type="button"
             onClick={() => void signOut()}
             disabled={isSigningOut}
-            className="justify-start sm:justify-center"
+            className="inline-flex items-center gap-1.5 self-start rounded-md px-3 py-1.5 text-sm transition-colors disabled:opacity-50 sm:self-center"
+            style={{ color: "#8899aa" }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "#f43f5e")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "#8899aa")}
           >
             <LogOut className="size-4" aria-hidden="true" />
             {isSigningOut ? "Signing out…" : "Sign out"}
-          </Button>
+          </button>
         </div>
       </section>
 
       <section className="rounded-lg border border-border bg-card p-6">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          AI Provider
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <SectionHeader label="AI Provider" />
+        <p className="mt-2 text-sm" style={{ color: "#8899aa" }}>
           Your preference is saved in this browser.
         </p>
 
@@ -346,32 +351,33 @@ export default function SettingsPage() {
               { id: "anthropic" as const, label: "Claude" },
               { id: "gemini" as const, label: "Gemini" },
             ] as const
-          ).map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              onClick={() => handleProviderChange(option.id)}
-              className={cn(
-                "rounded-lg border px-4 py-3 text-sm font-medium transition-colors",
-                provider === option.id
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border bg-background text-foreground hover:bg-muted/50",
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
+          ).map((option) => {
+            const active = provider === option.id;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => handleProviderChange(option.id)}
+                className="rounded-lg px-4 py-3 text-sm font-medium transition-colors"
+                style={{
+                  background: active ? "#1d3a5f" : "#111827",
+                  border: active ? "1px solid #3b82f6" : "1px solid #1e2d40",
+                  color: active ? "#ffffff" : "#8899aa",
+                }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
         </div>
         <Label className="sr-only">AI Provider</Label>
       </section>
 
       <section className="rounded-lg border border-border bg-card p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-              API Keys
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
+          <div className="flex-1">
+            <SectionHeader label="API Keys" />
+            <p className="mt-2 text-sm" style={{ color: "#8899aa" }}>
               Keys are encrypted before storage. Saved keys are shown by last four characters only.
             </p>
           </div>
@@ -399,8 +405,9 @@ export default function SettingsPage() {
               }
               autoComplete="off"
               onChange={(event) => setAnthropicKey(event.target.value)}
+              className="border-[#1e2d40] bg-[#0a0f1e] font-mono text-sm text-white placeholder:text-[#4a5568]"
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs" style={{ color: "#4a5568" }}>
               {isLoadingApiKeys
                 ? "Checking saved key..."
                 : apiKeyStatus.anthropicLast4 === null
@@ -422,8 +429,9 @@ export default function SettingsPage() {
               }
               autoComplete="off"
               onChange={(event) => setGeminiKey(event.target.value)}
+              className="border-[#1e2d40] bg-[#0a0f1e] font-mono text-sm text-white placeholder:text-[#4a5568]"
             />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs" style={{ color: "#4a5568" }}>
               {isLoadingApiKeys
                 ? "Checking saved key..."
                 : apiKeyStatus.geminiLast4 === null
@@ -436,11 +444,9 @@ export default function SettingsPage() {
 
       <section className="rounded-lg border border-border bg-card p-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-              Data
-            </h2>
-            <p className="mt-2 text-sm text-muted-foreground">
+          <div className="flex-1">
+            <SectionHeader label="Data" />
+            <p className="mt-2 text-sm" style={{ color: "#8899aa" }}>
               Manage portfolio snapshots and export your latest holdings.
             </p>
           </div>
@@ -535,6 +541,20 @@ export default function SettingsPage() {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <h2
+        className="text-[10px] uppercase tracking-[0.14em] whitespace-nowrap"
+        style={{ color: "#4a5568" }}
+      >
+        {label}
+      </h2>
+      <div className="h-px flex-1" style={{ background: "#1e2d40" }} />
     </div>
   );
 }

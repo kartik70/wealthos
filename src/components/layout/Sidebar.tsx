@@ -17,7 +17,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
 
-import { Button } from "@/components/ui/button";
 import { createSupabaseBrowserClient } from "@/lib/db/supabase";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +27,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: Gauge },
+  { href: "/dashboard", label: "Dashboard", icon: Gauge },
   { href: "/portfolio", label: "Portfolio", icon: BriefcaseBusiness },
   { href: "/insights", label: "Insights", icon: Lightbulb },
   { href: "/timeline", label: "Timeline", icon: Timeline },
@@ -87,32 +86,32 @@ export function Sidebar({ onImportPortfolio, onNavigate }: SidebarProps) {
     <aside
       className="flex h-full w-64 shrink-0 flex-col"
       style={{
-        background: "var(--background)",
-        borderRight: "1px solid var(--border)",
-        color: "var(--text-primary)",
+        background: "#0a0f1e",
+        borderRight: "1px solid #1e2d40",
+        color: "#f0f4f8",
       }}
     >
       <div
         className="flex h-16 items-center px-5"
-        style={{ borderBottom: "1px solid var(--border)" }}
+        style={{ borderBottom: "1px solid #1e2d40" }}
       >
         <div className="flex items-center gap-2.5">
           <div
-            className="grid size-8 place-items-center rounded-md"
-            style={{ background: "var(--accent-muted)", color: "var(--accent)" }}
+            className="grid size-8 place-items-center rounded-lg p-1.5"
+            style={{ background: "rgba(30, 58, 138, 0.3)", color: "#3b82f6" }}
           >
             <Landmark className="size-4" aria-hidden="true" />
           </div>
-          <div>
+          <div className="leading-tight">
             <p
-              className="text-base font-semibold tracking-tight"
-              style={{ color: "var(--text-primary)", fontWeight: 600 }}
+              className="text-base text-white"
+              style={{ fontFamily: "var(--font-display)", fontWeight: 600 }}
             >
               WealthOS
             </p>
             <p
               className="text-[10px] uppercase tracking-[0.18em]"
-              style={{ color: "var(--text-tertiary)" }}
+              style={{ color: "#4a5568" }}
             >
               Portfolio Intelligence
             </p>
@@ -124,8 +123,14 @@ export function Sidebar({ onImportPortfolio, onNavigate }: SidebarProps) {
         <button
           type="button"
           onClick={onImportPortfolio}
-          className="flex h-9 w-full items-center justify-center gap-2 rounded-md text-sm font-medium text-white transition-opacity hover:opacity-90"
-          style={{ background: "var(--accent)" }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "#2563eb";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "#3b82f6";
+          }}
+          className="flex h-9 w-full items-center justify-center gap-2 rounded-lg text-sm font-medium text-white transition-all duration-150"
+          style={{ background: "#3b82f6" }}
         >
           <CloudUpload className="size-4" aria-hidden="true" />
           Import Portfolio
@@ -136,7 +141,9 @@ export function Sidebar({ onImportPortfolio, onNavigate }: SidebarProps) {
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive =
-            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            item.href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname.startsWith(item.href);
 
           return (
             <Link
@@ -144,26 +151,28 @@ export function Sidebar({ onImportPortfolio, onNavigate }: SidebarProps) {
               href={item.href}
               onClick={onNavigate}
               className={cn(
-                "group relative flex h-9 items-center gap-2.5 rounded-md pl-3 pr-3 text-sm transition-colors",
+                "group relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-all duration-150",
               )}
               style={
                 isActive
                   ? {
-                      background: "var(--accent-muted)",
-                      color: "var(--text-primary)",
-                      borderLeft: "2px solid var(--accent)",
+                      background: "#1a2235",
+                      color: "#ffffff",
+                      borderLeft: "2px solid #3b82f6",
                       paddingLeft: "calc(0.75rem - 2px)",
                     }
-                  : { color: "var(--text-secondary)" }
+                  : { color: "#8899aa" }
               }
               onMouseEnter={(e) => {
                 if (!isActive) {
-                  e.currentTarget.style.color = "var(--text-primary)";
+                  e.currentTarget.style.color = "#ffffff";
+                  e.currentTarget.style.background = "#111827";
                 }
               }}
               onMouseLeave={(e) => {
                 if (!isActive) {
-                  e.currentTarget.style.color = "var(--text-secondary)";
+                  e.currentTarget.style.color = "#8899aa";
+                  e.currentTarget.style.background = "transparent";
                 }
               }}
             >
@@ -176,42 +185,53 @@ export function Sidebar({ onImportPortfolio, onNavigate }: SidebarProps) {
 
       <div
         className="space-y-2 p-3"
-        style={{ borderTop: "1px solid var(--border)" }}
+        style={{ borderTop: "1px solid #1e2d40" }}
       >
-        <div
-          className="flex items-center gap-2.5 rounded-lg px-2.5 py-2"
-          style={{ background: "var(--surface)" }}
-        >
+        <div className="flex items-center gap-2.5 px-1 py-1">
           <div
-            className="grid size-8 place-items-center rounded-full text-xs font-semibold text-white"
-            style={{ background: "var(--accent)" }}
+            className="grid size-9 shrink-0 place-items-center rounded-full font-mono text-xs"
+            style={{
+              background: "#1a2235",
+              color: "#3b82f6",
+              fontWeight: 500,
+            }}
           >
             {initials}
           </div>
           <div className="min-w-0 flex-1">
             <p
-              className="truncate text-sm font-medium"
-              style={{ color: "var(--text-primary)" }}
+              className="truncate text-sm text-white"
+              style={{ fontWeight: 500 }}
             >
               {displayName}
             </p>
             <p
               className="truncate text-xs"
-              style={{ color: "var(--text-secondary)" }}
+              style={{ color: "#4a5568" }}
             >
               {userEmail ?? "Signed in"}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => void signOut()}
+            disabled={isSigningOut}
+            aria-label={isSigningOut ? "Signing out" : "Sign out"}
+            title="Sign out"
+            className="grid size-8 shrink-0 place-items-center rounded-md transition-colors disabled:opacity-50"
+            style={{ color: "#8899aa" }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = "#f43f5e";
+              e.currentTarget.style.background = "#111827";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = "#8899aa";
+              e.currentTarget.style.background = "transparent";
+            }}
+          >
+            <LogOut className="size-4" aria-hidden="true" />
+          </button>
         </div>
-        <Button
-          variant="outline"
-          className="w-full justify-start"
-          onClick={() => void signOut()}
-          disabled={isSigningOut}
-        >
-          <LogOut className="size-4" aria-hidden="true" />
-          {isSigningOut ? "Signing out…" : "Sign out"}
-        </Button>
       </div>
     </aside>
   );

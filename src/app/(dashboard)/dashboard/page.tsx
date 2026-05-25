@@ -335,33 +335,45 @@ export default function DashboardPage() {
 
       {hasAnyHoldings && !isLoading && (
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.8fr)]">
-          <Card>
-            <CardHeader>
-              <CardTitle>Holdings</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Tabs defaultValue={hasEquityHoldings ? "equity" : "mutual-funds"}>
-                <TabsList>
-                  {hasEquityHoldings ? (
-                    <TabsTrigger value="equity">Equity</TabsTrigger>
-                  ) : null}
-                  {hasMutualFundHoldings ? (
-                    <TabsTrigger value="mutual-funds">Mutual funds</TabsTrigger>
-                  ) : null}
-                </TabsList>
-                {hasEquityHoldings && equitySnapshot !== null ? (
-                  <TabsContent value="equity" className="mt-4">
-                    <HoldingsTable holdings={equitySnapshot.holdings} />
-                  </TabsContent>
+          <div
+            className="overflow-hidden rounded-xl"
+            style={{ background: "#111827", border: "1px solid #1e2d40" }}
+          >
+            <Tabs defaultValue={hasEquityHoldings ? "equity" : "mutual-funds"}>
+              <TabsList
+                variant="line"
+                className="!h-auto !w-full !justify-start !rounded-none !p-0"
+                style={{ background: "#0a0f1e", borderBottom: "1px solid #1e2d40" }}
+              >
+                {hasEquityHoldings ? (
+                  <TabsTrigger
+                    value="equity"
+                    className="!h-11 !flex-none !rounded-none !px-5 !text-sm data-active:!text-white"
+                  >
+                    Equity
+                  </TabsTrigger>
                 ) : null}
-                {hasMutualFundHoldings && mutualFundSnapshot !== null ? (
-                  <TabsContent value="mutual-funds" className="mt-4">
-                    <MutualFundHoldingsTable holdings={mutualFundSnapshot.holdings} />
-                  </TabsContent>
+                {hasMutualFundHoldings ? (
+                  <TabsTrigger
+                    value="mutual-funds"
+                    className="!h-11 !flex-none !rounded-none !px-5 !text-sm data-active:!text-white"
+                  >
+                    Mutual funds
+                  </TabsTrigger>
                 ) : null}
-              </Tabs>
-            </CardContent>
-          </Card>
+              </TabsList>
+              {hasEquityHoldings && equitySnapshot !== null ? (
+                <TabsContent value="equity" className="p-5">
+                  <HoldingsTable holdings={equitySnapshot.holdings} />
+                </TabsContent>
+              ) : null}
+              {hasMutualFundHoldings && mutualFundSnapshot !== null ? (
+                <TabsContent value="mutual-funds" className="p-5">
+                  <MutualFundHoldingsTable holdings={mutualFundSnapshot.holdings} />
+                </TabsContent>
+              ) : null}
+            </Tabs>
+          </div>
 
           {hasEquityHoldings && equitySnapshot !== null ? (
             <Card>
@@ -406,54 +418,105 @@ function StatCard({
   value,
   valueClassName,
   isLoading,
+  direction,
 }: {
   label: string;
   value: string;
   valueClassName?: string;
   isLoading?: boolean;
+  direction?: "up" | "down" | "neutral";
 }) {
-  // Subtle top accent: emerald if positive value text, rose if negative, otherwise transparent.
-  const accentTop =
-    valueClassName === undefined
-      ? "transparent"
+  const inferredDirection: "up" | "down" | "neutral" =
+    direction ??
+    (valueClassName === undefined
+      ? "neutral"
       : valueClassName.includes("--gain")
-        ? "var(--gain)"
+        ? "up"
         : valueClassName.includes("--loss")
-          ? "var(--loss)"
-          : "transparent";
+          ? "down"
+          : "neutral");
+
+  const accentTop =
+    inferredDirection === "up"
+      ? "#10b981"
+      : inferredDirection === "down"
+        ? "#f43f5e"
+        : "#3b82f6";
+
+  const valueColor =
+    inferredDirection === "up"
+      ? "#10b981"
+      : inferredDirection === "down"
+        ? "#f43f5e"
+        : "#f0f4f8";
 
   return (
     <div
-      className="flex flex-col gap-2 rounded-xl px-4 py-3.5"
+      className="flex flex-col gap-2 rounded-xl p-5"
       style={{
-        background: "var(--surface-raised)",
-        border: "1px solid var(--border)",
-        borderTop: `2px solid ${accentTop === "transparent" ? "var(--border)" : accentTop}`,
+        background: "#111827",
+        border: "1px solid #1e2d40",
+        borderTop: `2px solid ${accentTop}`,
       }}
     >
       <span
-        className="text-[10px] font-medium uppercase tracking-[0.18em]"
-        style={{ color: "var(--text-tertiary)", fontFamily: "var(--font-display)" }}
+        className="text-[10px] font-medium uppercase tracking-[0.15em]"
+        style={{ color: "#4a5568", fontFamily: "var(--font-display)" }}
       >
         {label}
       </span>
       {isLoading ? (
         <div
-          className="h-7 w-2/3 animate-pulse rounded"
-          style={{ background: "var(--surface)" }}
+          className="mt-2 h-8 w-2/3 animate-pulse rounded"
+          style={{ background: "#1a2235" }}
         />
       ) : (
-        <div
-          className={cn(
-            "font-mono text-2xl",
-            valueClassName ?? "text-[color:var(--text-primary)]",
-          )}
-          style={{ fontWeight: 500 }}
-        >
-          {value}
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <div
+            className={cn("font-mono", valueClassName)}
+            style={{
+              fontSize: "28px",
+              fontWeight: 500,
+              color: valueClassName === undefined ? valueColor : undefined,
+              lineHeight: 1.1,
+            }}
+          >
+            {value}
+          </div>
+          {inferredDirection !== "neutral" ? (
+            <StatTrendGlyph direction={inferredDirection} />
+          ) : null}
         </div>
       )}
     </div>
+  );
+}
+
+function StatTrendGlyph({ direction }: { direction: "up" | "down" }) {
+  const color = direction === "up" ? "#10b981" : "#f43f5e";
+  // Simple sparkline-ish path — up: rising, down: falling
+  const path =
+    direction === "up"
+      ? "M2 16 L8 11 L13 13 L20 5 L26 7"
+      : "M2 5 L8 9 L13 7 L20 14 L26 12";
+  return (
+    <svg
+      width="36"
+      height="20"
+      viewBox="0 0 28 20"
+      fill="none"
+      aria-hidden="true"
+      style={{ flexShrink: 0 }}
+    >
+      <path
+        d={path}
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx={direction === "up" ? 26 : 26} cy={direction === "up" ? 7 : 12} r="2" fill={color} />
+    </svg>
   );
 }
 

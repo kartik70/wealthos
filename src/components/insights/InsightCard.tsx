@@ -46,12 +46,12 @@ export function InsightCard({
               {insight.recommendations.map((rec, index) => (
                 <div
                   key={index}
-                  className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-muted bg-muted/30 px-3 py-2"
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-[#1e2d40] bg-[#0a0f1e] px-3 py-2"
                 >
                   <ActionBadge action={rec.action} />
                   <PriorityBadge priority={rec.priority} />
-                  <span className="font-mono font-medium text-sm text-foreground">{rec.symbol}</span>
-                  <span className="text-sm text-muted-foreground">{rec.reason}</span>
+                  <span className="font-mono font-medium text-sm text-white">{rec.symbol}</span>
+                  <span className="text-sm text-[#8899aa]">{rec.reason}</span>
                 </div>
               ))}
             </div>
@@ -68,30 +68,30 @@ export function InsightCard({
             <div
               key={index}
               className={cn(
-                "flex items-start gap-3 rounded-lg border bg-muted/40 p-3 text-sm",
+                "flex items-start gap-3 rounded-lg border border-[#1e2d40] bg-[#0a0f1e] p-3 text-sm",
                 alert.urgency === "ACTION_NEEDED"
-                  ? "border-l-2 border-l-red-500"
+                  ? "border-l-2 border-l-[color:var(--loss)]"
                   : alert.urgency === "WARNING"
-                    ? "border-l-2 border-l-amber-500"
-                    : "border-l-2 border-l-slate-300",
+                    ? "border-l-2 border-l-[color:var(--warning)]"
+                    : "border-l-2 border-l-[#3b82f6]",
               )}
             >
               <AlertCircle
                 className={cn(
                   "size-4 flex-shrink-0 mt-0.5",
                   alert.urgency === "ACTION_NEEDED"
-                    ? "text-red-600"
+                    ? "text-[color:var(--loss)]"
                     : alert.urgency === "WARNING"
-                      ? "text-amber-600"
-                      : "text-blue-600",
+                      ? "text-[color:var(--warning)]"
+                      : "text-[#3b82f6]",
                 )}
               />
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-semibold uppercase">{alert.type}</span>
+                  <span className="text-[10px] font-mono font-semibold uppercase tracking-widest text-[#4a5568]">{alert.type}</span>
                   <UrgencyBadge urgency={alert.urgency} />
                 </div>
-                <p className="text-sm text-foreground">{alert.message}</p>
+                <p className="text-sm text-[#d1d9e0]">{alert.message}</p>
               </div>
             </div>
           ))}
@@ -104,15 +104,38 @@ export function InsightCard({
 
       {/* Empty state */}
       {!insight && hasHoldings && (
-        <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
-          <div className="text-sm text-muted-foreground">No insights generated yet.</div>
-          <button
-            type="button"
-            onClick={onGenerateInsights}
-            className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
-          >
-            Generate portfolio insights
-          </button>
+        <div
+          className="relative flex flex-col items-center justify-center gap-4 overflow-hidden rounded-xl py-14 text-center"
+          style={{
+            backgroundImage:
+              "linear-gradient(#1e2d40 1px, transparent 1px), linear-gradient(90deg, #1e2d40 1px, transparent 1px)",
+            backgroundSize: "40px 40px",
+            backgroundPosition: "center center",
+          }}
+        >
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(ellipse at center, transparent 0%, #111827 75%)",
+            }}
+          />
+          <div className="relative z-10 flex flex-col items-center gap-4">
+            <p className="text-sm" style={{ color: "#4a5568" }}>
+              <span className="mr-1.5" style={{ color: "#3b82f6" }}>
+                ✦
+              </span>
+              No insights yet
+            </p>
+            <button
+              type="button"
+              onClick={onGenerateInsights}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+              style={{ background: "#3b82f6" }}
+            >
+              Generate insights
+            </button>
+          </div>
         </div>
       )}
     </>
@@ -129,17 +152,17 @@ function SectionLabel({ label }: { label: string }) {
 }
 
 function ActionBadge({ action }: { action: string }) {
-  const variants: Record<string, { bg: string; text: string }> = {
-    BUY: { bg: "bg-emerald-100", text: "text-emerald-700" },
-    SELL: { bg: "bg-red-100", text: "text-red-700" },
-    HOLD: { bg: "bg-gray-100", text: "text-gray-700" },
-    REVIEW: { bg: "bg-blue-100", text: "text-blue-700" },
+  const variants: Record<string, string> = {
+    BUY: "bg-[color:var(--gain)]/15 text-[color:var(--gain)] border border-[color:var(--gain)]/30",
+    SELL: "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border border-[color:var(--loss)]/30",
+    HOLD: "bg-[#1a2235] text-[#8899aa] border border-[#1e2d40]",
+    REVIEW: "bg-[#3b82f6]/15 text-[#3b82f6] border border-[#3b82f6]/30",
   };
 
-  const variant = variants[action] || variants.HOLD;
+  const className = variants[action] ?? variants.HOLD;
 
   return (
-    <div className={cn("rounded px-2 py-0.5 text-xs font-semibold", variant.bg, variant.text)}>
+    <div className={cn("rounded px-2 py-0.5 text-[10px] font-mono font-medium tracking-wide", className)}>
       {action}
     </div>
   );
@@ -147,13 +170,13 @@ function ActionBadge({ action }: { action: string }) {
 
 function PriorityBadge({ priority }: { priority: string }) {
   const variants: Record<string, string> = {
-    HIGH: "bg-red-100 text-red-700",
-    MEDIUM: "bg-amber-100 text-amber-700",
-    LOW: "bg-gray-100 text-gray-700",
+    HIGH: "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border-[color:var(--loss)]/30",
+    MEDIUM: "bg-[color:var(--warning)]/15 text-[color:var(--warning)] border-[color:var(--warning)]/30",
+    LOW: "bg-[#1a2235] text-[#8899aa] border-[#1e2d40]",
   };
 
   return (
-    <Badge variant="outline" className={cn("text-xs", variants[priority] || variants.LOW)}>
+    <Badge variant="outline" className={cn("text-[10px] font-mono", variants[priority] || variants.LOW)}>
       {priority}
     </Badge>
   );
@@ -161,13 +184,13 @@ function PriorityBadge({ priority }: { priority: string }) {
 
 function UrgencyBadge({ urgency }: { urgency: string }) {
   const variants: Record<string, string> = {
-    ACTION_NEEDED: "bg-red-200 text-red-800",
-    WARNING: "bg-amber-200 text-amber-800",
-    INFO: "bg-blue-200 text-blue-800",
+    ACTION_NEEDED: "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border-[color:var(--loss)]/30",
+    WARNING: "bg-[color:var(--warning)]/15 text-[color:var(--warning)] border-[color:var(--warning)]/30",
+    INFO: "bg-[#3b82f6]/15 text-[#3b82f6] border-[#3b82f6]/30",
   };
 
   return (
-    <Badge variant="outline" className={cn("text-xs", variants[urgency] || variants.INFO)}>
+    <Badge variant="outline" className={cn("text-[10px] font-mono", variants[urgency] || variants.INFO)}>
       {urgency.replace("_", " ")}
     </Badge>
   );

@@ -110,32 +110,32 @@ export function HoldingsTable({
         placeholder="Search by symbol or name..."
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
-        className="max-w-sm"
+        className="max-w-sm rounded-lg border-[#1e2d40] bg-[#0a0f1e] text-sm text-white placeholder:text-[#4a5568] focus-visible:border-[#3b82f6]/60 focus-visible:ring-0"
         disabled={isLoading}
       />
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto rounded-lg" style={{ border: "1px solid #1e2d40" }}>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Symbol</TableHead>
-              <TableHead className="text-right">Qty</TableHead>
-              <TableHead className="text-right">Avg Cost</TableHead>
-              <TableHead className="text-right">LTP</TableHead>
+              <TableHead className="bg-[#0d1421]">Symbol</TableHead>
+              <TableHead className="bg-[#0d1421] text-right">Qty</TableHead>
+              <TableHead className="bg-[#0d1421] text-right">Avg Cost</TableHead>
+              <TableHead className="bg-[#0d1421] text-right">LTP</TableHead>
               <TableHead
-                className="cursor-pointer select-none text-right hover:bg-muted"
+                className="cursor-pointer select-none bg-[#0d1421] text-right hover:bg-[#111827]"
                 onClick={() => handleColumnSort("currentValue")}
               >
                 Current Value{getSortIndicator("currentValue")}
               </TableHead>
               <TableHead
-                className="cursor-pointer select-none text-right hover:bg-muted"
+                className="cursor-pointer select-none bg-[#0d1421] text-right hover:bg-[#111827]"
                 onClick={() => handleColumnSort("unrealisedGain")}
               >
                 P&amp;L (₹){getSortIndicator("unrealisedGain")}
               </TableHead>
-              <TableHead className="text-right">P&amp;L (%)</TableHead>
+              <TableHead className="bg-[#0d1421] text-right">P&amp;L (%)</TableHead>
               <TableHead
-                className="cursor-pointer select-none text-right hover:bg-muted"
+                className="cursor-pointer select-none bg-[#0d1421] text-right hover:bg-[#111827]"
                 onClick={() => handleColumnSort("allocationPct")}
               >
                 Allocation %{getSortIndicator("allocationPct")}
@@ -147,13 +147,15 @@ export function HoldingsTable({
               ? Array.from({ length: skeletonRows }, (_, index) => (
                   <TableRow key={`skeleton-${index}`}>
                     <TableCell colSpan={8}>
-                      <div className="h-5 w-full animate-pulse rounded bg-muted" />
+                      <div className="h-5 w-full animate-pulse rounded bg-[#1a2235]" />
                     </TableCell>
                   </TableRow>
                 ))
               : filteredAndSortedHoldings.map((holding) => (
-                  <TableRow key={holding.symbol}>
-                    <TableCell className="font-medium">{holding.symbol}</TableCell>
+                  <TableRow key={holding.symbol} className="hover:bg-[#1a2235]">
+                    <TableCell className="font-mono font-medium text-white">
+                      {holding.symbol}
+                    </TableCell>
                     <TableCell className="text-right font-mono">
                       {numberFormatter.format(holding.quantity)}
                     </TableCell>

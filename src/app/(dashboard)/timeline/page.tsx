@@ -246,7 +246,16 @@ export default function TimelinePage() {
         </div>
       ) : null}
 
-      <div className="relative ml-2 border-l border-border/70 pl-6">
+      <div
+        className="relative ml-2 pl-6"
+        style={{
+          backgroundImage:
+            "linear-gradient(to bottom, rgba(59,130,246,0.5), #1e2d40)",
+          backgroundSize: "1px 100%",
+          backgroundRepeat: "no-repeat",
+          backgroundPosition: "left top",
+        }}
+      >
         {snapshots.map((snapshot, index) => {
           const isFirst = index === snapshots.length - 1;
           const previous = index < snapshots.length - 1 ? snapshots[index + 1] : null;
@@ -257,9 +266,18 @@ export default function TimelinePage() {
 
           return (
             <div key={snapshot.id} className="relative pb-6">
-              <span className="absolute -left-[1.85rem] top-4 size-3 rounded-full border-2 border-background bg-foreground/70" />
+              <span
+                className="absolute -left-[1.85rem] top-5 size-3 rounded-full"
+                style={{
+                  background: "#3b82f6",
+                  boxShadow: "0 0 0 4px rgba(59, 130, 246, 0.2)",
+                }}
+              />
 
-              <div className="rounded-xl border border-border/70 bg-card/60">
+              <div
+                className="rounded-xl"
+                style={{ background: "#111827", border: "1px solid #1e2d40" }}
+              >
                 <div className="flex items-start gap-1 px-4 py-4">
                   <button
                     type="button"
@@ -293,10 +311,13 @@ export default function TimelinePage() {
                             key={pill.key}
                             variant="secondary"
                             className={cn(
-                              "font-mono text-xs",
-                              pill.tone === "positive" && "bg-emerald-100 text-emerald-800 hover:bg-emerald-100",
-                              pill.tone === "negative" && "bg-red-100 text-red-800 hover:bg-red-100",
-                              pill.tone === "neutral" && "bg-muted text-muted-foreground hover:bg-muted",
+                              "font-mono text-[10px] tracking-wider",
+                              pill.tone === "positive" &&
+                                "bg-[color:var(--gain)]/10 text-[color:var(--gain)] border border-[color:var(--gain)]/20 hover:bg-[color:var(--gain)]/10",
+                              pill.tone === "negative" &&
+                                "bg-[color:var(--loss)]/10 text-[color:var(--loss)] border border-[color:var(--loss)]/20 hover:bg-[color:var(--loss)]/10",
+                              pill.tone === "neutral" &&
+                                "bg-[#1a2235] text-[#4a5568] border border-[#1e2d40] hover:bg-[#1a2235]",
                             )}
                           >
                             {pill.label}
@@ -338,13 +359,13 @@ export default function TimelinePage() {
               </div>
 
               {valueDelta !== null && (
-                <div className="mt-3 flex items-center justify-center gap-2 font-mono text-xs text-muted-foreground">
-                  <span>―――</span>
+                <div className="mt-3 flex items-center justify-center gap-2 font-mono text-xs" style={{ color: "#4a5568" }}>
+                  <span aria-hidden="true">——</span>
                   <p>
                     {valueDelta > 0 ? "+" : valueDelta < 0 ? "−" : ""}
                     {rupeeFormatter.format(Math.abs(valueDelta))}
                   </p>
-                  <span>―――</span>
+                  <span aria-hidden="true">——</span>
                 </div>
               )}
             </div>

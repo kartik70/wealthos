@@ -178,16 +178,37 @@ export default function GoalsPage() {
           ))}
         </div>
       ) : sortedGoals.length === 0 ? (
-        <Card className="border border-dashed">
-          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-            <span className="text-5xl text-muted-foreground">◎</span>
-            <h2 className="text-xl font-medium">No goals set</h2>
-            <p className="text-sm text-muted-foreground">
-              Define a target corpus to start tracking your progress
+        <div
+          className="relative flex flex-col items-center gap-3 overflow-hidden rounded-xl py-20 text-center"
+          style={{
+            background: "#111827",
+            border: "1px solid #1e2d40",
+          }}
+        >
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 flex select-none items-center justify-center leading-none"
+            style={{ color: "#1e2d40", fontSize: "200px" }}
+          >
+            ◎
+          </span>
+          <div className="relative z-10 flex flex-col items-center gap-4">
+            <h2 className="text-xl text-white" style={{ fontWeight: 500 }}>
+              No goals set
+            </h2>
+            <p className="max-w-sm text-sm" style={{ color: "#8899aa" }}>
+              Define a target corpus to start tracking your progress.
             </p>
-            <Button onClick={() => setIsDrawerOpen(true)}>Add Goal</Button>
-          </CardContent>
-        </Card>
+            <button
+              type="button"
+              onClick={() => setIsDrawerOpen(true)}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+              style={{ background: "#3b82f6" }}
+            >
+              Add Goal
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="grid gap-3">
           {sortedGoals.map((goal) => {
@@ -206,6 +227,12 @@ export default function GoalsPage() {
             const gap = targetCorpus - projectedValue;
             const progress = calcGoalProgress(currentPortfolioValue, targetCorpus);
             const status = getGoalStatus(projectedValue, targetCorpus);
+            const statusAccent =
+              status === "ON TRACK"
+                ? "#10b981"
+                : status === "NEEDS ATTENTION"
+                  ? "#f59e0b"
+                  : "#f43f5e";
             const yearsFromCurrentValue = calcYearsToGoal(
               currentPortfolioValue,
               targetCorpus,
@@ -213,7 +240,10 @@ export default function GoalsPage() {
             );
 
             return (
-              <Card key={goal.id}>
+              <Card
+                key={goal.id}
+                style={{ borderLeft: `3px solid ${statusAccent}` }}
+              >
                 <CardContent className="space-y-4 py-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="grid flex-1 gap-5 lg:grid-cols-[1.4fr_auto_1fr] lg:items-center">

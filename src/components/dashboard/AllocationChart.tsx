@@ -27,15 +27,16 @@ interface CustomTooltipProps {
 }
 
 const chartColors = [
-  "#2563eb",
-  "#059669",
-  "#dc2626",
-  "#7c3aed",
-  "#ca8a04",
-  "#0891b2",
-  "#db2777",
-  "#4f46e5",
-  "#64748b",
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#8b5cf6",
+  "#06b6d4",
+  "#f43f5e",
+  "#84cc16",
+  "#ec4899",
+  "#6366f1",
+  "#14b8a6",
 ];
 
 export function AllocationChart({ holdings }: AllocationChartProps) {
@@ -73,7 +74,12 @@ export function AllocationChart({ holdings }: AllocationChartProps) {
             layout="vertical"
             align="right"
             verticalAlign="middle"
-            wrapperStyle={{ fontSize: 12, lineHeight: "20px" }}
+            wrapperStyle={{
+              fontSize: 12,
+              lineHeight: "20px",
+              color: "#8899aa",
+              fontFamily: "var(--font-mono)",
+            }}
           />
         </PieChart>
       </ResponsiveContainer>

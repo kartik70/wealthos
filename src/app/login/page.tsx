@@ -29,42 +29,51 @@ export default function LoginPage() {
 
   return (
     <div
-      className="relative flex min-h-screen flex-col px-6 py-6 lg:px-12 lg:py-10"
-      style={{ background: "var(--background)" }}
+      className="relative flex min-h-screen flex-col overflow-hidden"
+      style={{
+        background:
+          "radial-gradient(ellipse at 30% 50%, rgba(59,130,246,0.06) 0%, transparent 60%), #0a0f1e",
+      }}
     >
       {/* Wordmark top-left */}
-      <header className="flex items-center gap-2.5">
+      <header className="flex items-center gap-2.5 px-6 py-6 lg:px-12 lg:py-8">
         <div
           className="grid size-8 place-items-center rounded-md"
-          style={{ background: "var(--accent-muted)", color: "var(--accent)" }}
+          style={{ background: "rgba(59, 130, 246, 0.12)", color: "#3b82f6" }}
         >
           <Landmark className="size-4" aria-hidden="true" />
         </div>
         <span
-          className="text-base font-semibold tracking-tight"
+          className="text-base tracking-tight text-white"
           style={{ fontFamily: "var(--font-display)", fontWeight: 600 }}
         >
           WealthOS
         </span>
       </header>
 
-      {/* Main centered two-column layout */}
-      <main className="mx-auto flex w-full max-w-6xl flex-1 items-center">
-        <div className="grid w-full grid-cols-1 items-center gap-12 lg:grid-cols-2 lg:gap-20">
-          {/* Left: headline */}
+      {/* Main two-column hero */}
+      <main className="mx-auto flex w-full max-w-7xl flex-1 items-center px-6 pb-24 lg:px-12">
+        <div className="grid w-full grid-cols-1 items-center gap-16 lg:grid-cols-[55fr_45fr] lg:gap-20">
+          {/* Left: 55% */}
           <section className="flex flex-col gap-10">
+            <span
+              className="text-xs font-medium uppercase tracking-[0.22em]"
+              style={{ color: "#3b82f6" }}
+            >
+              Portfolio Intelligence
+            </span>
+
             <h1
-              className="leading-[1.05] tracking-tight"
+              className="leading-[1.02] tracking-tight"
               style={{
                 fontFamily: "var(--font-display)",
                 fontWeight: 300,
-                fontSize: "clamp(40px, 5.6vw, 56px)",
-                color: "var(--text-primary)",
+                fontSize: "clamp(44px, 5.4vw, 64px)",
               }}
             >
-              Your portfolio.
+              <span style={{ color: "#ffffff" }}>Your portfolio.</span>
               <br />
-              <span style={{ color: "var(--text-secondary)" }}>Understood.</span>
+              <span style={{ color: "#3b82f6" }}>Understood.</span>
             </h1>
 
             <ul className="flex flex-col gap-3.5">
@@ -76,54 +85,52 @@ export default function LoginPage() {
                 <li
                   key={feature}
                   className="flex items-center gap-3 text-sm"
-                  style={{ color: "var(--text-secondary)" }}
+                  style={{ color: "#8899aa" }}
                 >
                   <span
-                    className="inline-block size-1.5 rounded-full"
-                    style={{ background: "var(--gain)" }}
                     aria-hidden="true"
-                  />
+                    className="font-mono"
+                    style={{ color: "#3b82f6" }}
+                  >
+                    →
+                  </span>
                   <span>{feature}</span>
                 </li>
               ))}
             </ul>
           </section>
 
-          {/* Right: sign in card */}
+          {/* Right: 45% — sign in card */}
           <section className="flex justify-center lg:justify-end">
             <div
-              className="w-full max-w-md rounded-xl p-8"
+              className="w-full max-w-md rounded-2xl p-10"
               style={{
-                background: "var(--surface)",
-                border: "1px solid var(--border)",
+                background: "#111827",
+                border: "1px solid #1e2d40",
               }}
             >
-              <div className="flex flex-col items-start gap-6">
+              <div className="flex flex-col items-center gap-6">
                 <div
-                  className="grid size-11 place-items-center rounded-lg"
+                  className="grid size-12 place-items-center rounded-xl"
                   style={{
-                    background: "var(--accent-muted)",
-                    color: "var(--accent)",
+                    background: "rgba(59, 130, 246, 0.12)",
+                    color: "#3b82f6",
                   }}
                 >
-                  <Landmark className="size-5" aria-hidden="true" />
+                  <Landmark className="size-6" aria-hidden="true" />
                 </div>
 
-                <div className="space-y-1.5">
+                <div className="space-y-2 text-center">
                   <h2
-                    className="text-xl tracking-tight"
+                    className="text-2xl tracking-tight text-white"
                     style={{
                       fontFamily: "var(--font-display)",
-                      fontWeight: 600,
-                      color: "var(--text-primary)",
+                      fontWeight: 500,
                     }}
                   >
                     Welcome back
                   </h2>
-                  <p
-                    className="text-sm leading-relaxed"
-                    style={{ color: "var(--text-secondary)" }}
-                  >
+                  <p className="text-sm leading-relaxed" style={{ color: "#8899aa" }}>
                     Sign in to access your portfolio intelligence.
                   </p>
                 </div>
@@ -132,18 +139,25 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => void signInWithGoogle()}
                   disabled={isLoading}
-                  className="flex h-11 w-full items-center justify-center gap-3 rounded-md bg-white px-4 text-sm font-medium text-[#1f2937] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex w-full items-center justify-center gap-3 rounded-xl bg-white px-4 py-3 text-sm font-medium text-[#1f2937] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <GoogleIcon />
                   {isLoading ? "Redirecting…" : "Continue with Google"}
                 </button>
+
+                <p
+                  className="-mt-3 text-center text-xs"
+                  style={{ color: "#4a5568" }}
+                >
+                  No account needed — sign in to get started
+                </p>
 
                 {errorMessage !== null ? (
                   <p
                     className="w-full rounded-md px-3 py-2 text-xs"
                     style={{
                       background: "rgba(244, 63, 94, 0.08)",
-                      color: "var(--loss)",
+                      color: "#f43f5e",
                       border: "1px solid rgba(244, 63, 94, 0.25)",
                     }}
                   >
@@ -157,10 +171,10 @@ export default function LoginPage() {
       </main>
 
       <footer
-        className="pt-8 text-xs"
-        style={{ color: "var(--text-tertiary)" }}
+        className="absolute inset-x-0 bottom-8 text-center text-xs"
+        style={{ color: "#4a5568" }}
       >
-        Self-hosted. Your keys, your data.
+        Self-hosted · Open source · Your keys, your data
       </footer>
     </div>
   );
