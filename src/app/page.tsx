@@ -12,7 +12,7 @@ import {
   Target,
 } from "lucide-react";
 
-const GITHUB_URL = "https://github.com/kartik70";
+const GITHUB_URL = "https://github.com/kartik70/wealthos";
 const LINKEDIN_URL = "https://linkedin.com/in/kartik-kakad";
 
 function GithubIcon({ className }: { className?: string }) {
