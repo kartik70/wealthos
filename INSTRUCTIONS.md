@@ -287,6 +287,8 @@ Four chunk types stored in `snapshot_embeddings`:
 
 Each chunk = one complete business event, not an arbitrary token window. The `content_tsv` column is auto-generated (GENERATED ALWAYS AS) for full-text search.
 
+Chunks are prefixed with `[date | chunk_type]` metadata before embedding so temporal and type context is captured in the vector space.
+
 Embeddings use Gemini `gemini-embedding-001`, 768 dimensions (truncated via `.slice(0, 768)`).
 
 Chat history: last 10 messages passed as conversation history. Capped at 800 max_tokens response.

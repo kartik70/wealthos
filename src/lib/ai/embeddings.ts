@@ -70,7 +70,7 @@ export async function embedSnapshot(
     snapshot.createdAt,
   );
 
-  const snapshotSummaryText = `On ${date}, portfolio value was ₹${snapshot.totalValue.toFixed(0)}, total gain/loss ₹${snapshot.totalGain.toFixed(0)} (${snapshot.totalGainPct >= 0 ? "+" : ""}${snapshot.totalGainPct.toFixed(2)}%). Holdings: ${holdingsSummary}${mfSentence}`;
+  const snapshotSummaryText = `[${date} | snapshot_summary] On ${date}, portfolio value was ₹${snapshot.totalValue.toFixed(0)}, total gain/loss ₹${snapshot.totalGain.toFixed(0)} (${snapshot.totalGainPct >= 0 ? "+" : ""}${snapshot.totalGainPct.toFixed(2)}%). Holdings: ${holdingsSummary}${mfSentence}`;
 
   const snapshotEmbedding = await generateEmbedding(snapshotSummaryText, apiKey);
   rows.push({
@@ -110,8 +110,8 @@ export async function embedSnapshot(
 
     const diffText =
       parts.length > 0
-        ? `Between ${prevDate} and ${date}: ${parts.join("; ")}`
-        : `Between ${prevDate} and ${date}: no significant position changes`;
+        ? `[${date} | diff_summary] Between ${prevDate} and ${date}: ${parts.join("; ")}`
+        : `[${date} | diff_summary] Between ${prevDate} and ${date}: no significant position changes`;
 
     const diffEmbedding = await generateEmbedding(diffText, apiKey);
     rows.push({
@@ -132,12 +132,13 @@ export async function embedSnapshot(
     .maybeSingle();
 
   if (insight?.summary !== null && insight?.summary !== undefined && insight.summary !== "") {
-    const insightEmbedding = await generateEmbedding(insight.summary, apiKey);
+    const insightContent = `[${date} | insight_summary] AI analysis on ${date}: ${insight.summary}`;
+    const insightEmbedding = await generateEmbedding(insightContent, apiKey);
     rows.push({
       snapshot_id: snapshot.id,
       user_id: snapshot.userId,
       chunk_type: "insight_summary",
-      content: insight.summary,
+      content: insightContent,
       embedding: insightEmbedding as unknown as number[],
     });
   }
@@ -274,6 +275,11 @@ export async function embedGoals(userId: string): Promise<void> {
   const combinedValue = equityValue + mfValue;
   const snapshotId = latestSnapshot.id;
   const now = Date.now();
+  const todayFormatted = new Date(now).toLocaleDateString("en-IN", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
   const rows: EmbeddingInsert[] = [];
 
@@ -297,7 +303,7 @@ export async function embedGoals(userId: string): Promise<void> {
       day: "numeric",
     });
 
-    const content = `Goal: ${goal.name}. Target corpus ₹${goal.target_corpus.toFixed(0)} by ${targetDateFormatted}. Expected return ${goal.expected_return.toFixed(1)}%. Current combined portfolio value ₹${combinedValue.toFixed(0)} (equity ₹${equityValue.toFixed(0)} + MF ₹${mfValue.toFixed(0)}). Progress ${progress.toFixed(1)}%. Status: ${status}. Years remaining: ${yearsRemaining.toFixed(1)}.`;
+    const content = `[${todayFormatted} | goal_summary] Goal '${goal.name}': target ₹${goal.target_corpus.toFixed(0)} by ${targetDateFormatted}. Expected return ${goal.expected_return.toFixed(1)}%. Current combined portfolio value ₹${combinedValue.toFixed(0)} (equity ₹${equityValue.toFixed(0)} + MF ₹${mfValue.toFixed(0)}). Progress ${progress.toFixed(1)}%. Status: ${status}. Years remaining: ${yearsRemaining.toFixed(1)}.`;
 
     const embedding = await generateEmbedding(content, apiKey);
     rows.push({
