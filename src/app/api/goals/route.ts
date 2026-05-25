@@ -1,4 +1,6 @@
 import { requireAuth } from "@/lib/db/require-auth";
+import { embedGoals } from "@/lib/ai/embeddings";
+import { getEffectiveApiKey } from "@/lib/ai/user-api-keys";
 import type { GoalRow } from "@/types/db";
 
 export const runtime = "nodejs";
@@ -124,6 +126,15 @@ export async function POST(request: Request): Promise<Response> {
       { error: `Failed to create goal: ${error.message}` },
       { status: 500 },
     );
+  }
+
+  try {
+    const apiKey = await getEffectiveApiKey(userId, "gemini");
+    if (apiKey !== undefined) {
+      await embedGoals(userId, apiKey);
+    }
+  } catch (embedErr) {
+    console.error("Failed to refresh goal embeddings after create", embedErr);
   }
 
   return Response.json({ goal: data }, { status: 201 });

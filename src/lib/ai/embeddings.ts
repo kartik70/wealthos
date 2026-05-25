@@ -1,8 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 import { createSupabaseAdminClient } from "../db/supabase";
+import { calcLumpSumProjection, calcGoalProgress } from "../finance/goals";
 import type { Holding, PortfolioSnapshot } from "../../types/portfolio";
-import type { MutualFundHoldingRow } from "../../types/db";
+import type { GoalRow, MutualFundHoldingRow } from "../../types/db";
 import type { SnapshotDiff } from "../finance/diff";
 import type { Database } from "../../types/db";
 
@@ -204,4 +205,97 @@ async function buildMutualFundEmbeddingSentence(
   });
 
   return ` Mutual funds on ${formattedDate}: total value ₹${snapshotData.total_current_value.toFixed(0)}, returns ₹${snapshotData.total_returns.toFixed(0)} (${snapshotData.total_returns_pct >= 0 ? "+" : ""}${snapshotData.total_returns_pct.toFixed(2)}%). Top funds: ${topFunds || "none"}.`;
+}
+
+function getGoalStatus(projectedValue: number, targetCorpus: number): string {
+  if (projectedValue >= targetCorpus) {
+    return "ON TRACK";
+  }
+  if (projectedValue >= targetCorpus * 0.75) {
+    return "NEEDS ATTENTION";
+  }
+  return "OFF TRACK";
+}
+
+export async function embedGoals(userId: string, apiKey?: string): Promise<void> {
+  const supabase = createSupabaseAdminClient();
+
+  // Always clear previous goal_summary rows for this user, so deletions are reflected.
+  await supabase
+    .from("snapshot_embeddings")
+    .delete()
+    .eq("user_id", userId)
+    .eq("chunk_type", "goal_summary");
+
+  const [{ data: goals, error: goalsError }, { data: latestSnapshot, error: snapshotError }] =
+    await Promise.all([
+      supabase.from("goals").select("*").eq("user_id", userId),
+      supabase
+        .from("portfolio_snapshots")
+        .select("id, total_value")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  if (goalsError !== null) {
+    throw new Error(`Failed to fetch goals for embedding: ${goalsError.message}`);
+  }
+
+  if (snapshotError !== null) {
+    throw new Error(`Failed to fetch latest snapshot for goal embeddings: ${snapshotError.message}`);
+  }
+
+  if (goals === null || goals.length === 0 || latestSnapshot === null) {
+    return;
+  }
+
+  const currentValue = latestSnapshot.total_value;
+  const snapshotId = latestSnapshot.id;
+  const now = Date.now();
+
+  const rows: EmbeddingInsert[] = [];
+
+  for (const goal of goals as GoalRow[]) {
+    const targetDateMs = new Date(goal.target_date).getTime();
+    const yearsRemaining = Number.isFinite(targetDateMs)
+      ? Math.max(0, (targetDateMs - now) / (365.25 * 24 * 60 * 60 * 1000))
+      : 0;
+
+    const projectedValue = calcLumpSumProjection(
+      currentValue,
+      goal.expected_return,
+      yearsRemaining,
+    );
+    const progress = calcGoalProgress(currentValue, goal.target_corpus);
+    const status = getGoalStatus(projectedValue, goal.target_corpus);
+
+    const targetDateFormatted = new Date(goal.target_date).toLocaleDateString("en-IN", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    const content = `Goal: ${goal.name}. Target corpus ₹${goal.target_corpus.toFixed(0)} by ${targetDateFormatted}. Expected return ${goal.expected_return.toFixed(1)}%. Current portfolio value ₹${currentValue.toFixed(0)}. Progress ${progress.toFixed(1)}%. Status: ${status}. Years remaining: ${yearsRemaining.toFixed(1)}.`;
+
+    const embedding = await generateEmbedding(content, apiKey);
+    rows.push({
+      snapshot_id: snapshotId,
+      user_id: userId,
+      chunk_type: "goal_summary",
+      content,
+      embedding: embedding as unknown as number[],
+    });
+  }
+
+  if (rows.length === 0) {
+    return;
+  }
+
+  const { error } = await supabase.from("snapshot_embeddings").insert(rows);
+
+  if (error !== null) {
+    throw new Error(`Failed to save goal embeddings: ${error.message}`);
+  }
 }

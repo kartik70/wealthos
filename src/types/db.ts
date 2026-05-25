@@ -47,7 +47,7 @@ export type SnapshotEmbeddingRow = {
   id: string;
   snapshot_id: string;
   user_id: string;
-  chunk_type: "snapshot_summary" | "diff_summary" | "insight_summary";
+  chunk_type: "snapshot_summary" | "diff_summary" | "insight_summary" | "goal_summary";
   content: string;
   embedding: number[];
   created_at: string;

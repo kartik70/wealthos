@@ -3,7 +3,7 @@ import {
   getEffectiveApiKey,
   NO_API_KEY_CONFIGURED_MESSAGE,
 } from "@/lib/ai/user-api-keys";
-import { embedSnapshot } from "../../../../lib/ai/embeddings";
+import { embedSnapshot, embedGoals } from "../../../../lib/ai/embeddings";
 import { calcSnapshotDiff } from "../../../../lib/finance/diff";
 import type { Holding, PortfolioSnapshot } from "../../../../types/portfolio";
 import type { HoldingRow, PortfolioSnapshotRow } from "../../../../types/db";
@@ -78,10 +78,21 @@ export async function GET(): Promise<Response> {
 
   const successCount = results.filter((r) => r.status === "ok").length;
 
+  let goalsEmbedded = true;
+  let goalsError: string | undefined;
+  try {
+    await embedGoals(userId, apiKey);
+  } catch (err) {
+    goalsEmbedded = false;
+    goalsError = err instanceof Error ? err.message : "Unknown error";
+  }
+
   return Response.json({
     message: `Embedded ${successCount}/${snapshots.length} snapshots`,
     embedded: successCount,
     results,
+    goalsEmbedded,
+    goalsError,
   });
 }
 
