@@ -10,7 +10,19 @@ import type { HoldingRow, PortfolioSnapshotRow } from "../../../../types/db";
 
 export const runtime = "nodejs";
 
-export async function GET(): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
+  const expectedSecret = process.env.ADMIN_SECRET;
+  if (expectedSecret === undefined || expectedSecret.length === 0) {
+    return Response.json(
+      { error: "Admin endpoint not configured" },
+      { status: 503 },
+    );
+  }
+  const providedSecret = request.headers.get("x-admin-secret");
+  if (providedSecret !== expectedSecret) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const auth = await requireAuth();
   if ("error" in auth) {
     return auth.error;
