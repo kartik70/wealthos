@@ -16,6 +16,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { withAIProviderHeaders } from "@/lib/ai/provider";
+import {
+  ApiKeyPrompt,
+  parseMissingApiKeyPayload,
+  type MissingApiKey,
+} from "@/components/ui/ApiKeyPrompt";
 import { calcHealthScore } from "@/lib/finance/health";
 import { classifySectorsSync } from "@/lib/finance/sector-map";
 import { cn } from "@/lib/utils";
@@ -79,6 +84,7 @@ export default function InsightsPage() {
   const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [missingApiKey, setMissingApiKey] = useState<MissingApiKey | null>(null);
   const [hoveredSector, setHoveredSector] = useState<string | null>(null);
 
   useEffect(() => {
@@ -169,6 +175,7 @@ export default function InsightsPage() {
 
     setIsGenerating(true);
     setError(null);
+    setMissingApiKey(null);
 
     try {
       const response = await fetch("/api/insights/detailed", {
@@ -178,6 +185,15 @@ export default function InsightsPage() {
       });
 
       const payload: unknown = await response.json();
+
+      if (response.status === 402) {
+        const missing = parseMissingApiKeyPayload(payload);
+        if (missing !== null) {
+          setMissingApiKey(missing);
+          return;
+        }
+      }
+
       if (!response.ok) {
         const message =
           typeof payload === "object" && payload !== null && "error" in payload
@@ -294,6 +310,15 @@ export default function InsightsPage() {
           <span>Snapshot: {dateFormatter.format(new Date(snapshotDate))}</span>
         </div>
       </div>
+
+      {missingApiKey !== null && (
+        <div className="mb-8">
+          <ApiKeyPrompt
+            missingKey={missingApiKey}
+            onDismiss={() => setMissingApiKey(null)}
+          />
+        </div>
+      )}
 
       {error !== null && (
         <div className="mb-8 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">

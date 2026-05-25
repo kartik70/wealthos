@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { TextBlock } from "@anthropic-ai/sdk/resources/messages";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+import { MissingApiKeyError } from "./keyResolver";
 import type {
   Alert,
   AssetAllocationEntry,
@@ -98,7 +99,7 @@ async function generateWithAnthropic(
   const resolvedApiKey = apiKey ?? process.env.ANTHROPIC_API_KEY;
 
   if (resolvedApiKey === undefined || resolvedApiKey.trim() === "") {
-    throw new Error("Missing ANTHROPIC_API_KEY");
+    throw new MissingApiKeyError("anthropic");
   }
 
   const client =
@@ -133,7 +134,7 @@ async function generateWithGemini(
   const resolvedApiKey = apiKey ?? process.env.GEMINI_API_KEY;
 
   if (resolvedApiKey === undefined || resolvedApiKey.trim() === "") {
-    throw new Error("Missing GEMINI_API_KEY");
+    throw new MissingApiKeyError("gemini");
   }
 
   const client =
@@ -213,7 +214,7 @@ async function streamAdvisorAnthropic({
   const resolvedApiKey = apiKey ?? process.env.ANTHROPIC_API_KEY;
 
   if (resolvedApiKey === undefined || resolvedApiKey.trim() === "") {
-    throw new Error("Missing ANTHROPIC_API_KEY");
+    throw new MissingApiKeyError("anthropic");
   }
 
   const historyWindow = conversationHistory.slice(-10);
@@ -264,7 +265,7 @@ async function streamAdvisorGemini({
   const resolvedApiKey = apiKey ?? process.env.GEMINI_API_KEY;
 
   if (resolvedApiKey === undefined || resolvedApiKey.trim() === "") {
-    throw new Error("Missing GEMINI_API_KEY");
+    throw new MissingApiKeyError("gemini");
   }
 
   const gemini = new GoogleGenerativeAI(resolvedApiKey);

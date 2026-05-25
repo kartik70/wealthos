@@ -1,8 +1,8 @@
 import { streamAdvisorResponse } from "@/lib/ai/client";
 import {
-  getEffectiveApiKey,
-  NO_API_KEY_CONFIGURED_MESSAGE,
-} from "@/lib/ai/user-api-keys";
+  missingApiKeyResponse,
+  resolveProviderKey,
+} from "@/lib/ai/keyResolver";
 import { requireAuth } from "@/lib/db/require-auth";
 import { createSupabaseServerClient } from "@/lib/db/supabase";
 import { retrieveRelevantContext } from "../../../../lib/ai/retrieval";
@@ -80,16 +80,31 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const provider = getAIProviderFromRequest(request);
-  const apiKey = await getEffectiveApiKey(userId, provider);
-
-  if (apiKey === undefined) {
-    return Response.json({ error: NO_API_KEY_CONFIGURED_MESSAGE }, { status: 400 });
+  let apiKey: string;
+  try {
+    apiKey = await resolveProviderKey(userId, provider);
+  } catch (err) {
+    const keyResponse = missingApiKeyResponse(err);
+    if (keyResponse !== null) {
+      return keyResponse;
+    }
+    throw err;
   }
 
-  const [retrievedContext, currentSnapshot] = await Promise.all([
-    retrieveRelevantContext(sanitizedMessage, userId, 5),
-    fetchCurrentSnapshot(supabase, userId),
-  ]);
+  let retrievedContext: string;
+  let currentSnapshot: PortfolioSnapshot | null;
+  try {
+    [retrievedContext, currentSnapshot] = await Promise.all([
+      retrieveRelevantContext(sanitizedMessage, userId, 5),
+      fetchCurrentSnapshot(supabase, userId),
+    ]);
+  } catch (err) {
+    const keyResponse = missingApiKeyResponse(err);
+    if (keyResponse !== null) {
+      return keyResponse;
+    }
+    throw err;
+  }
 
   const systemPrompt = buildGuardrailedSystemPrompt(retrievedContext, currentSnapshot);
 

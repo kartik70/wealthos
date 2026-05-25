@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient } from "../db/supabase";
 import { generateEmbedding } from "./embeddings";
+import { resolveGeminiKey } from "./keyResolver";
 
 export async function retrieveRelevantContext(
   question: string,
@@ -8,7 +9,8 @@ export async function retrieveRelevantContext(
 ): Promise<string> {
   const supabase = createSupabaseAdminClient();
 
-  const questionEmbedding = await generateEmbedding(question);
+  const apiKey = await resolveGeminiKey(userId);
+  const questionEmbedding = await generateEmbedding(question, apiKey);
 
   const { data, error } = await supabase.rpc("match_snapshot_embeddings", {
     query_embedding: questionEmbedding,

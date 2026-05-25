@@ -7,9 +7,9 @@ import {
 import { buildPortfolioPrompt } from "../../../features/ai/promptBuilder";
 import { getAIProviderFromRequest, isAIProvider } from "../../../lib/ai/provider";
 import {
-  getEffectiveApiKey,
-  NO_API_KEY_CONFIGURED_MESSAGE,
-} from "@/lib/ai/user-api-keys";
+  missingApiKeyResponse,
+  resolveProviderKey,
+} from "@/lib/ai/keyResolver";
 import type { Database, Json, MutualFundHoldingRow } from "../../../types/db";
 import type {
   Holding,
@@ -104,11 +104,7 @@ export async function POST(request: Request): Promise<Response> {
     );
     const prompt = buildInsightPrompt(snapshot, metrics, mutualFundContext);
     const provider = getAIProviderFromRequest(request);
-    const apiKey = await getEffectiveApiKey(userId, provider);
-
-    if (apiKey === undefined) {
-      return Response.json({ error: NO_API_KEY_CONFIGURED_MESSAGE }, { status: 400 });
-    }
+    const apiKey = await resolveProviderKey(userId, provider);
 
     const insight = await generateInsight(prompt, provider, apiKey);
     // Never trust the model's generatedAt — overwrite with server time.
@@ -139,6 +135,10 @@ export async function POST(request: Request): Promise<Response> {
 
     return Response.json(insight);
   } catch (error) {
+    const keyResponse = missingApiKeyResponse(error);
+    if (keyResponse !== null) {
+      return keyResponse;
+    }
     return Response.json(
       { error: error instanceof Error ? error.message : "Failed to generate insight" },
       { status: 500 },

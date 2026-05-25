@@ -5,6 +5,11 @@ import { ArrowUp, Bot, RotateCcw, Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 import { Button } from "@/components/ui/button";
+import {
+  ApiKeyPrompt,
+  parseMissingApiKeyPayload,
+  type MissingApiKey,
+} from "@/components/ui/ApiKeyPrompt";
 import { withAIProviderHeaders } from "@/lib/ai/provider";
 import { useAdvisorStore, type ChatMessage } from "@/stores/advisorStore";
 
@@ -22,6 +27,7 @@ export default function AdvisorPage() {
     useAdvisorStore();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [missingApiKey, setMissingApiKey] = useState<MissingApiKey | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -123,6 +129,17 @@ export default function AdvisorPage() {
           headers: withAIProviderHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ message: trimmed, conversationHistory }),
         });
+
+        if (response.status === 402) {
+          const payload: unknown = await response.json().catch(() => null);
+          const missing = parseMissingApiKeyPayload(payload);
+          if (missing !== null) {
+            setMissingApiKey(missing);
+            updateLastAssistantMessage("");
+            finalizeLastAssistantMessage(0, "anthropic");
+            return;
+          }
+        }
 
         if (!response.ok || response.body === null) {
           throw new Error("Failed to connect to advisor");
@@ -252,6 +269,14 @@ export default function AdvisorPage() {
         <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto">
+            {missingApiKey !== null && (
+              <div className="mx-auto max-w-2xl px-4 pt-4">
+                <ApiKeyPrompt
+                  missingKey={missingApiKey}
+                  onDismiss={() => setMissingApiKey(null)}
+                />
+              </div>
+            )}
             {isEmpty ? (
               <EmptyState onSuggest={(q) => void sendMessage(q)} />
             ) : (

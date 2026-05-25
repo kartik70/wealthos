@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, LogOut, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Download, LogOut, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -393,7 +393,16 @@ export default function SettingsPage() {
 
         <div className="mt-5 grid gap-4 md:grid-cols-2">
           <div className="grid gap-2">
-            <Label htmlFor="anthropic-api-key">Anthropic API Key</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="anthropic-api-key">Anthropic API Key</Label>
+              <KeyStatusIndicator
+                isLoading={isLoadingApiKeys}
+                hasKey={apiKeyStatus.anthropicLast4 !== null}
+              />
+            </div>
+            <p className="text-xs" style={{ color: "#8899aa" }}>
+              Required for Claude chat and insights.
+            </p>
             <Input
               id="anthropic-api-key"
               type="password"
@@ -414,10 +423,31 @@ export default function SettingsPage() {
                   ? "No Anthropic key saved."
                   : `Saved key ends in ${apiKeyStatus.anthropicLast4}.`}
             </p>
+            <p className="text-xs" style={{ color: "#4a5568" }}>
+              Get your key at{" "}
+              <a
+                href="https://console.anthropic.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#3b82f6] hover:underline"
+              >
+                console.anthropic.com
+              </a>
+              .
+            </p>
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="gemini-api-key">Gemini API Key</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="gemini-api-key">Gemini API Key</Label>
+              <KeyStatusIndicator
+                isLoading={isLoadingApiKeys}
+                hasKey={apiKeyStatus.geminiLast4 !== null}
+              />
+            </div>
+            <p className="text-xs" style={{ color: "#8899aa" }}>
+              Required for embeddings (advisor chat history) and Gemini chat if selected.
+            </p>
             <Input
               id="gemini-api-key"
               type="password"
@@ -437,6 +467,18 @@ export default function SettingsPage() {
                 : apiKeyStatus.geminiLast4 === null
                   ? "No Gemini key saved."
                   : `Saved key ends in ${apiKeyStatus.geminiLast4}.`}
+            </p>
+            <p className="text-xs" style={{ color: "#4a5568" }}>
+              Get your key at{" "}
+              <a
+                href="https://aistudio.google.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#3b82f6] hover:underline"
+              >
+                aistudio.google.com
+              </a>
+              .
             </p>
           </div>
         </div>
@@ -556,5 +598,31 @@ function SectionHeader({ label }: { label: string }) {
       </h2>
       <div className="h-px flex-1" style={{ background: "#1e2d40" }} />
     </div>
+  );
+}
+
+function KeyStatusIndicator({
+  isLoading,
+  hasKey,
+}: {
+  isLoading: boolean;
+  hasKey: boolean;
+}) {
+  if (isLoading) {
+    return null;
+  }
+  if (hasKey) {
+    return (
+      <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-500">
+        <CheckCircle2 className="size-3.5" aria-hidden="true" />
+        Saved
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1 text-[11px] font-medium text-rose-500">
+      <AlertTriangle className="size-3.5" aria-hidden="true" />
+      Missing
+    </span>
   );
 }

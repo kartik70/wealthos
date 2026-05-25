@@ -1,6 +1,5 @@
 import { requireAuth } from "@/lib/db/require-auth";
 import { embedGoals } from "@/lib/ai/embeddings";
-import { getEffectiveApiKey } from "@/lib/ai/user-api-keys";
 
 export const runtime = "nodejs";
 
@@ -38,10 +37,7 @@ export async function DELETE(
   }
 
   try {
-    const apiKey = await getEffectiveApiKey(userId, "gemini");
-    if (apiKey !== undefined) {
-      await embedGoals(userId, apiKey);
-    }
+    await embedGoals(userId);
   } catch (embedErr) {
     console.error("Failed to refresh goal embeddings after delete", embedErr);
   }

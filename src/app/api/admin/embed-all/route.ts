@@ -1,8 +1,8 @@
 import { requireAuth } from "@/lib/db/require-auth";
 import {
-  getEffectiveApiKey,
-  NO_API_KEY_CONFIGURED_MESSAGE,
-} from "@/lib/ai/user-api-keys";
+  missingApiKeyResponse,
+  resolveGeminiKey,
+} from "@/lib/ai/keyResolver";
 import { embedSnapshot, embedGoals } from "../../../../lib/ai/embeddings";
 import { calcSnapshotDiff } from "../../../../lib/finance/diff";
 import type { Holding, PortfolioSnapshot } from "../../../../types/portfolio";
@@ -16,10 +16,15 @@ export async function GET(): Promise<Response> {
     return auth.error;
   }
   const { supabase, userId } = auth.data;
-  const apiKey = await getEffectiveApiKey(userId, "gemini");
 
-  if (apiKey === undefined) {
-    return Response.json({ error: NO_API_KEY_CONFIGURED_MESSAGE }, { status: 400 });
+  try {
+    await resolveGeminiKey(userId);
+  } catch (err) {
+    const keyResponse = missingApiKeyResponse(err);
+    if (keyResponse !== null) {
+      return keyResponse;
+    }
+    throw err;
   }
 
   const { data: snapshots, error: snapshotsError } = await supabase
@@ -63,7 +68,7 @@ export async function GET(): Promise<Response> {
       const diff =
         previousSnapshot === null ? undefined : calcSnapshotDiff(previousSnapshot, snapshot);
 
-      await embedSnapshot(snapshot, holdings, diff, apiKey);
+      await embedSnapshot(snapshot, holdings, diff, userId);
       previousSnapshot = snapshot;
 
       results.push({ snapshotId: snapshotRow.id, status: "ok" });
@@ -81,7 +86,7 @@ export async function GET(): Promise<Response> {
   let goalsEmbedded = true;
   let goalsError: string | undefined;
   try {
-    await embedGoals(userId, apiKey);
+    await embedGoals(userId);
   } catch (err) {
     goalsEmbedded = false;
     goalsError = err instanceof Error ? err.message : "Unknown error";

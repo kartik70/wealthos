@@ -7,9 +7,10 @@ import { calcTaxSummary } from "@/lib/finance/tax";
 import { buildDetailedInsightPrompt } from "@/features/ai/detailedPromptBuilder";
 import { getAIProviderFromRequest, isAIProvider } from "@/lib/ai/provider";
 import {
-  getEffectiveApiKey,
-  NO_API_KEY_CONFIGURED_MESSAGE,
-} from "@/lib/ai/user-api-keys";
+  missingApiKeyResponse,
+  resolveAnthropicKey,
+  resolveProviderKey,
+} from "@/lib/ai/keyResolver";
 import type { Database, Json, MutualFundHoldingRow } from "@/types/db";
 import type { AIProvider } from "@/lib/ai/provider";
 import type {
@@ -160,13 +161,16 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const provider = getAIProviderFromRequest(request);
-    const apiKey = await getEffectiveApiKey(userId, provider);
+    const apiKey = await resolveProviderKey(userId, provider);
 
-    if (apiKey === undefined) {
-      return Response.json({ error: NO_API_KEY_CONFIGURED_MESSAGE }, { status: 400 });
+    // Sector classification falls back to the on-disk symbol map when no
+    // Anthropic key is available, so a missing key here is non-fatal.
+    let anthropicApiKey: string | undefined;
+    try {
+      anthropicApiKey = await resolveAnthropicKey(userId);
+    } catch {
+      anthropicApiKey = undefined;
     }
-
-    const anthropicApiKey = await getEffectiveApiKey(userId, "anthropic");
     const typedSnapshot = mapSnapshot(snapshot, holdings);
     const sectors = await classifySectors(holdings, anthropicApiKey);
     const healthScore = calcHealthScoreWithSectors(holdings, sectors);
@@ -213,6 +217,10 @@ export async function POST(request: Request): Promise<Response> {
       insight,
     } satisfies DetailedInsightResponseBody);
   } catch (error) {
+    const keyResponse = missingApiKeyResponse(error);
+    if (keyResponse !== null) {
+      return keyResponse;
+    }
     return Response.json(
       {
         error:

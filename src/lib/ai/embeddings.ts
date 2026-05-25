@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 import { createSupabaseAdminClient } from "../db/supabase";
 import { calcLumpSumProjection, calcGoalProgress } from "../finance/goals";
+import { MissingApiKeyError, resolveGeminiKey } from "./keyResolver";
 import type { Holding, PortfolioSnapshot } from "../../types/portfolio";
 import type { GoalRow, MutualFundHoldingRow } from "../../types/db";
 import type { SnapshotDiff } from "../finance/diff";
@@ -15,7 +16,7 @@ export async function generateEmbedding(text: string, apiKey?: string): Promise<
   const resolvedApiKey = apiKey ?? process.env.GEMINI_API_KEY;
 
   if (resolvedApiKey === undefined || resolvedApiKey.trim() === "") {
-    throw new Error("Missing GEMINI_API_KEY for embeddings");
+    throw new MissingApiKeyError("gemini");
   }
 
   const client =
@@ -38,8 +39,10 @@ export async function embedSnapshot(
   snapshot: PortfolioSnapshot,
   holdings: Holding[],
   diff?: SnapshotDiff,
-  apiKey?: string,
+  userId?: string,
 ): Promise<void> {
+  const effectiveUserId = userId ?? snapshot.userId;
+  const apiKey = await resolveGeminiKey(effectiveUserId);
   const supabase = createSupabaseAdminClient();
   const rows: EmbeddingInsert[] = [];
 
@@ -217,7 +220,8 @@ function getGoalStatus(projectedValue: number, targetCorpus: number): string {
   return "OFF TRACK";
 }
 
-export async function embedGoals(userId: string, apiKey?: string): Promise<void> {
+export async function embedGoals(userId: string): Promise<void> {
+  const apiKey = await resolveGeminiKey(userId);
   const supabase = createSupabaseAdminClient();
 
   // Always clear previous goal_summary rows for this user, so deletions are reflected.

@@ -18,6 +18,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { withAIProviderHeaders } from "@/lib/ai/provider";
+import {
+  ApiKeyPrompt,
+  parseMissingApiKeyPayload,
+  type MissingApiKey,
+} from "@/components/ui/ApiKeyPrompt";
 import type { CombinedPortfolioResult } from "@/lib/finance/combined";
 import { cn } from "@/lib/utils";
 import type {
@@ -71,6 +76,7 @@ export default function DashboardPage() {
   const [insight, setInsight] = useState<InsightResponse | null>(null);
   const [isGeneratingInsight, setIsGeneratingInsight] = useState(false);
   const [insightError, setInsightError] = useState<string | null>(null);
+  const [missingApiKey, setMissingApiKey] = useState<MissingApiKey | null>(null);
 
   const fetchLatestSnapshot = useCallback(async () => {
     setIsLoading(true);
@@ -167,6 +173,7 @@ export default function DashboardPage() {
 
     setIsGeneratingInsight(true);
     setInsightError(null);
+    setMissingApiKey(null);
     setInsight(null);
 
     try {
@@ -177,6 +184,14 @@ export default function DashboardPage() {
       });
 
       const payload: unknown = await response.json();
+
+      if (response.status === 402) {
+        const missing = parseMissingApiKeyPayload(payload);
+        if (missing !== null) {
+          setMissingApiKey(missing);
+          return;
+        }
+      }
 
       if (!response.ok) {
         const errorMsg =
@@ -320,6 +335,14 @@ export default function DashboardPage() {
             </Button>
           </CardHeader>
           <CardContent>
+            {missingApiKey !== null && (
+              <div className="mb-3">
+                <ApiKeyPrompt
+                  missingKey={missingApiKey}
+                  onDismiss={() => setMissingApiKey(null)}
+                />
+              </div>
+            )}
             <InsightCard
               insight={insight}
               onGenerateInsights={handleGenerateInsights}
