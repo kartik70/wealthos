@@ -1,11 +1,13 @@
 import { streamAdvisorResponse } from "@/lib/ai/client";
 import {
   missingApiKeyResponse,
+  resolveGeminiKey,
   resolveProviderKey,
 } from "@/lib/ai/keyResolver";
 import { requireAuth } from "@/lib/db/require-auth";
 import { createSupabaseServerClient } from "@/lib/db/supabase";
 import { retrieveRelevantContext } from "../../../../lib/ai/retrieval";
+import { generateEmbedding } from "../../../../lib/ai/embeddings";
 import { analyseQuery } from "../../../../lib/ai/queryAnalyser";
 import { runResearchAgent } from "../../../../lib/ai/researchAgent";
 import {
@@ -101,9 +103,13 @@ export async function POST(request: Request): Promise<Response> {
   let retrievedChunkTypes: string[];
   let currentSnapshot: PortfolioSnapshot | null;
   try {
-    // Fetch current snapshot first so we can analyse the query against
-    // the user's actual holdings (symbols + gain/loss filters).
-    currentSnapshot = await fetchCurrentSnapshot(supabase, userId);
+    // Fix 2: question embedding and snapshot fetch are independent — run in parallel.
+    const geminiApiKey = await resolveGeminiKey(userId);
+    const [questionEmbedding, snapshotResult] = await Promise.all([
+      generateEmbedding(sanitizedMessage, geminiApiKey),
+      fetchCurrentSnapshot(supabase, userId),
+    ]);
+    currentSnapshot = snapshotResult;
     const queryAnalysis = analyseQuery(
       sanitizedMessage,
       currentSnapshot?.holdings ?? [],
@@ -113,6 +119,7 @@ export async function POST(request: Request): Promise<Response> {
       chunkTypes: queryAnalysis.chunkTypes,
       dateRange: queryAnalysis.dateRange ?? undefined,
       symbols: queryAnalysis.symbols,
+      precomputedEmbedding: questionEmbedding,
     });
     retrievedContext = retrieval.context;
     retrievedChunksCount = retrieval.chunksUsed;
@@ -315,5 +322,6 @@ function rowToSnapshot(row: PortfolioSnapshotRow, holdingRows: HoldingRow[]): Po
       allocationPct: h.allocation_pct,
     })),
     source: (row.source as PortfolioSnapshot["source"]) ?? "manual",
+    contextCache: row.context_cache,
   };
 }

@@ -16,6 +16,7 @@ export type PortfolioSnapshotRow = {
   total_gain_pct: number;
   source: "kite" | "groww" | "manual" | null;
   raw_data: Json | null;
+  context_cache: string | null;
 };
 
 export type HoldingRow = {
@@ -117,9 +118,10 @@ export interface Database {
     Tables: {
       portfolio_snapshots: {
         Row: PortfolioSnapshotRow;
-        Insert: Omit<PortfolioSnapshotRow, "id" | "created_at"> & {
+        Insert: Omit<PortfolioSnapshotRow, "id" | "created_at" | "context_cache"> & {
           id?: string;
           created_at?: string;
+          context_cache?: string | null;
         };
         Update: Partial<PortfolioSnapshotRow>;
         Relationships: [];
@@ -249,6 +251,12 @@ export interface Database {
           created_at: string;
           keyword_score: number;
         }>;
+      };
+      set_ivfflat_probes: {
+        Args: {
+          probes: number;
+        };
+        Returns: void;
       };
     };
     Enums: Record<string, never>;

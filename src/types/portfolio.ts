@@ -41,6 +41,7 @@ export interface PortfolioSnapshot {
   totalGainPct: number;
   holdings: Holding[];
   source: "kite" | "groww" | "manual";
+  contextCache?: string | null;
 }
 
 export interface PortfolioTotals {

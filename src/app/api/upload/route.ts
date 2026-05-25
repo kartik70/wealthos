@@ -7,6 +7,7 @@ import {
 import { parseGrowwXLSX } from "../../../lib/parsers/groww";
 import { parseKiteCSV } from "../../../lib/parsers/kite";
 import { embedSnapshot } from "../../../lib/ai/embeddings";
+import { buildSnapshotContextString } from "../../../lib/ai/contextBuilder";
 import type { Database } from "../../../types/db";
 
 export const runtime = "nodejs";
@@ -159,6 +160,19 @@ async function handleKiteUpload(formData: FormData): Promise<Response> {
     holdings,
     source: "kite" as const,
   };
+
+  const contextCache = buildSnapshotContextString(snapshotForEmbed, holdings);
+  const { error: contextCacheError } = await supabase
+    .from("portfolio_snapshots")
+    .update({ context_cache: contextCache })
+    .eq("id", snapshot.id);
+  if (contextCacheError !== null) {
+    console.error(
+      "Failed to persist snapshot context cache:",
+      contextCacheError.message,
+    );
+  }
+
   embedSnapshot(snapshotForEmbed, holdings, undefined, userId).catch(
     (err: unknown) => {
       console.error("embedSnapshot failed silently:", err);

@@ -20,6 +20,7 @@ export interface RetrieveOptions {
   chunkTypes?: ChunkType[];
   dateRange?: { from: string; to: string };
   symbols?: string[];
+  precomputedEmbedding?: number[];
 }
 
 export interface RetrieveResult {
@@ -46,7 +47,17 @@ export async function retrieveRelevantContext(
   const dateTo = options?.dateRange?.to ?? null;
 
   const apiKey = await resolveGeminiKey(userId);
-  const questionEmbedding = await generateEmbedding(question, apiKey);
+  const questionEmbedding =
+    options?.precomputedEmbedding ?? (await generateEmbedding(question, apiKey));
+
+  // Fix 4: bump ivfflat probes for better recall on approximate vector search.
+  // Failure is non-fatal — query still works with default probes.
+  const { error: probesError } = await supabase.rpc("set_ivfflat_probes", {
+    probes: 10,
+  });
+  if (probesError !== null) {
+    console.error("set_ivfflat_probes failed:", probesError.message);
+  }
 
   const [semanticRes, keywordRes] = await Promise.all([
     supabase.rpc("match_snapshot_embeddings_filtered", {

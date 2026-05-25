@@ -12,7 +12,53 @@ type EmbeddingInsert = Database["public"]["Tables"]["snapshot_embeddings"]["Inse
 
 let geminiEmbeddingClient: GoogleGenerativeAI | null = null;
 
+class LRUCache<K, V> {
+  private cache = new Map<K, V>();
+  private maxSize: number;
+
+  constructor(maxSize: number) {
+    this.maxSize = maxSize;
+  }
+
+  get(key: K): V | undefined {
+    if (!this.cache.has(key)) return undefined;
+    const value = this.cache.get(key)!;
+    this.cache.delete(key);
+    this.cache.set(key, value);
+    return value;
+  }
+
+  set(key: K, value: V): void {
+    if (this.cache.has(key)) {
+      this.cache.delete(key);
+    } else if (this.cache.size >= this.maxSize) {
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.cache.delete(oldestKey);
+      }
+    }
+    this.cache.set(key, value);
+  }
+
+  has(key: K): boolean {
+    return this.cache.has(key);
+  }
+}
+
+const embeddingCache = new LRUCache<string, number[]>(100);
+
 export async function generateEmbedding(text: string, apiKey?: string): Promise<number[]> {
+  const cacheKey = text.toLowerCase().trim();
+  const cached = embeddingCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const embedding = await generateEmbeddingFromAPI(text, apiKey);
+  embeddingCache.set(cacheKey, embedding);
+  return embedding;
+}
+
+async function generateEmbeddingFromAPI(text: string, apiKey?: string): Promise<number[]> {
   const resolvedApiKey = apiKey ?? process.env.GEMINI_API_KEY;
 
   if (resolvedApiKey === undefined || resolvedApiKey.trim() === "") {
@@ -24,15 +70,15 @@ export async function generateEmbedding(text: string, apiKey?: string): Promise<
       ? (geminiEmbeddingClient ??= new GoogleGenerativeAI(resolvedApiKey))
       : new GoogleGenerativeAI(resolvedApiKey);
 
-  const model = client.getGenerativeModel({ 
-  model: "gemini-embedding-001",
-});
+  const model = client.getGenerativeModel({
+    model: "gemini-embedding-001",
+  });
 
-const result = await model.embedContent(text);
-const fullEmbedding = result.embedding.values;
+  const result = await model.embedContent(text);
+  const fullEmbedding = result.embedding.values;
 
-// Truncate to 768 dimensions
-return fullEmbedding.slice(0, 768);
+  // Truncate to 768 dimensions
+  return fullEmbedding.slice(0, 768);
 }
 
 export async function embedSnapshot(

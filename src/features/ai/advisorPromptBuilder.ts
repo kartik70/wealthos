@@ -42,9 +42,16 @@ Answer the user's question grounded in the context above.`;
 /**
  * Plain-text snapshot summary used by the Research Agent as the
  * "CURRENT PORTFOLIO" section of the merged context.
+ *
+ * Prefers the precomputed `contextCache` written at upload time. Falls back to
+ * building the section from the snapshot if the cache is null (e.g. older
+ * snapshots that predate the cache column).
  */
 export function buildCurrentSnapshotText(snapshot: PortfolioSnapshot | null): string {
   if (snapshot === null) return "";
+  if (snapshot.contextCache !== null && snapshot.contextCache !== undefined && snapshot.contextCache !== "") {
+    return snapshot.contextCache;
+  }
   return buildCurrentSnapshotSection(snapshot).trim();
 }
 

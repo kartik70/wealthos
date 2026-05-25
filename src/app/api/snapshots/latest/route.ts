@@ -20,6 +20,7 @@ interface LatestEquitySnapshot {
   holdings: Holding[];
   source: "kite" | "groww";
   createdAt: string;
+  contextCache: string | null;
   insight?: InsightResponse;
 }
 
@@ -57,6 +58,7 @@ export async function GET(): Promise<Response> {
           total_gain_pct,
           source,
           created_at,
+          context_cache,
           holdings (
             symbol,
             name,
@@ -141,6 +143,7 @@ export async function GET(): Promise<Response> {
         total_gain_pct: number;
         source: string;
         created_at: string;
+        context_cache: string | null;
         holdings: Array<{
           symbol: string;
           name: string | null;
@@ -229,6 +232,7 @@ export async function GET(): Promise<Response> {
         holdings,
         source: snapshotData.source as "kite" | "groww",
         createdAt: snapshotData.created_at,
+        contextCache: snapshotData.context_cache,
         insight,
       };
     }

@@ -293,6 +293,12 @@ Embeddings use Gemini `gemini-embedding-001`, 768 dimensions (truncated via `.sl
 
 Chat history: last 10 messages passed as conversation history. Capped at 800 max_tokens response.
 
+### Latency Optimisations
+- Embedding cache: LRU cache (100 entries) prevents repeat Gemini API calls
+- Parallel execution: question embedding + snapshot fetch + conversation history run simultaneously
+- Context cache: snapshot context string precomputed at upload time, stored in `portfolio_snapshots.context_cache`
+- pgvector probes: `ivfflat.probes = 10` for faster approximate search
+
 ---
 
 ## Research Agent Architecture
