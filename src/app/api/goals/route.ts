@@ -8,6 +8,8 @@ export const runtime = "nodejs";
 interface GoalsResponse {
   goals: GoalRow[];
   currentPortfolioValue: number;
+  equityValue: number;
+  mutualFundValue: number;
 }
 
 interface CreateGoalRequest {
@@ -24,21 +26,31 @@ export async function GET(): Promise<Response> {
   }
   const { supabase, userId } = auth.data;
 
-  const [{ data: goals, error: goalsError }, { data: snapshot, error: snapshotError }] =
-    await Promise.all([
-      supabase
-        .from("goals")
-        .select("*")
-        .eq("user_id", userId)
-        .order("target_date", { ascending: true }),
-      supabase
-        .from("portfolio_snapshots")
-        .select("total_value")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
+  const [
+    { data: goals, error: goalsError },
+    { data: snapshot, error: snapshotError },
+    { data: mfSnapshot, error: mfSnapshotError },
+  ] = await Promise.all([
+    supabase
+      .from("goals")
+      .select("*")
+      .eq("user_id", userId)
+      .order("target_date", { ascending: true }),
+    supabase
+      .from("portfolio_snapshots")
+      .select("total_value")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("mutual_fund_snapshots")
+      .select("total_current_value")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   if (goalsError !== null) {
     return Response.json(
@@ -54,9 +66,21 @@ export async function GET(): Promise<Response> {
     );
   }
 
+  if (mfSnapshotError !== null) {
+    return Response.json(
+      { error: `Failed to fetch mutual fund value: ${mfSnapshotError.message}` },
+      { status: 500 },
+    );
+  }
+
+  const equityValue = snapshot?.total_value ?? 0;
+  const mutualFundValue = mfSnapshot?.total_current_value ?? 0;
+
   const response: GoalsResponse = {
     goals: goals ?? [],
-    currentPortfolioValue: snapshot?.total_value ?? 0,
+    currentPortfolioValue: equityValue + mutualFundValue,
+    equityValue,
+    mutualFundValue,
   };
 
   return Response.json(response);

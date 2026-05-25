@@ -18,7 +18,9 @@ export default function LoginPage() {
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
     });
 
     if (error !== null) {
@@ -130,7 +132,10 @@ export default function LoginPage() {
                   >
                     Welcome back
                   </h2>
-                  <p className="text-sm leading-relaxed" style={{ color: "#8899aa" }}>
+                  <p
+                    className="text-sm leading-relaxed"
+                    style={{ color: "#8899aa" }}
+                  >
                     Sign in to access your portfolio intelligence.
                   </p>
                 </div>

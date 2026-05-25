@@ -1,36 +1,244 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# WealthOS — AI Portfolio Intelligence Platform
 
-## Getting Started
+> Your portfolio. Finally understood.
 
-First, run the development server:
+WealthOS is an open-source, AI-powered portfolio intelligence platform built for Indian investors. Upload your Zerodha Kite and Groww exports, get deep analysis, track every decision over time, and chat with your entire investment history using RAG-powered AI.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+**Live demo:** [wealthos-liard.vercel.app](https://wealthos-liard.vercel.app)
+
+---
+
+## What it does
+
+Most broker dashboards show you numbers. WealthOS tells you what those numbers mean.
+
+- **Snapshot Timeline** — every portfolio state saved with a date. Compare any two snapshots. See exactly what changed, what was bought, sold, or profit-booked.
+- **AI Insights** — stock-by-stock verdicts (BOOK PROFIT / HOLD / EXIT), MF fund quality check, LTCG timing alerts, tax harvesting opportunities, and a ranked priority action plan.
+- **Deep Analysis** — health score, sector classification, investor risk profile detection, fund overlap analysis, combined equity + MF view.
+- **RAG-Powered Advisor** — conversational AI that retrieves relevant snapshots from your history to answer questions precisely. Ask "when did I buy CIPLA?" or "am I on track for retirement?" and get answers grounded in your actual data.
+- **Goals Tracking** — set a target corpus, track progress against combined equity + MF value, see projected value at target date.
+- **Bring Your Own Key** — self-host for free on Vercel. Add your own Anthropic or Gemini API key in settings.
+
+---
+
+## Architecture
+
+The core principle: **deterministic finance engine first, AI interpretation layer second.**
+
+```
+Kite CSV / Groww XLSX
+        ↓
+Pure TypeScript Finance Engine
+(P&L · CAGR · Tax · Diff · Risk · Sector · Health Score)
+        ↓
+Prompt Builder
+        ↓
+Claude / Gemini
+        ↓
+Structured JSON (validated)
+        ↓
+Dashboard · Insights · Advisor · Timeline
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The AI never calculates. It only interprets. Every number shown in the UI — P&L, CAGR, allocation %, tax liability, health score — is computed in pure TypeScript before the AI sees it.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### RAG Pipeline
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+Upload CSV/XLSX
+        ↓
+Generate text chunks per snapshot:
+  - snapshot_summary (full portfolio state)
+  - diff_summary (changes vs previous)
+  - insight_summary (AI commentary)
+  - goal_summary (goal progress)
+        ↓
+Embed via Gemini text-embedding-004 (768 dims)
+        ↓
+Store in Supabase pgvector
+        ↓
+At query time: embed question → cosine similarity search → retrieve top 5 chunks
+        ↓
+Inject retrieved context + current snapshot into Claude system prompt
+        ↓
+Answer grounded in actual portfolio history
+```
 
-## Learn More
+Chunking strategy: **record-based semantic chunking** — each chunk represents one complete business event (a snapshot state, a portfolio diff, an AI commentary, a goal status) rather than arbitrary token windows. This preserves the relationship between dates, symbols, and values.
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Tech Stack
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Layer | Technology |
+|---|---|
+| Framework | Next.js 15 (App Router) |
+| Language | TypeScript (strict) |
+| Styling | Tailwind CSS + shadcn/ui (Nova preset) |
+| State | Zustand |
+| Charts | Recharts |
+| Database | Supabase (Postgres + pgvector) |
+| Auth | Supabase Google OAuth |
+| AI Chat | Anthropic Claude (claude-sonnet-4-20250514) |
+| AI Alternative | Google Gemini (gemini-2.0-flash) |
+| Embeddings | Google Gemini (gemini-embedding-001, 768 dims) |
+| CSV Parsing | papaparse |
+| XLSX Parsing | SheetJS |
+| Email Alerts | Resend |
+| Cron | Vercel Cron Jobs |
+| Deployment | Vercel |
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Self-hosting
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Prerequisites
+
+- Node.js 18+
+- A Supabase project (free tier works)
+- An Anthropic or Gemini API key
+- A Google Cloud project with OAuth credentials
+
+### Setup
+
+**1. Clone and install**
+```bash
+git clone https://github.com/kartik70/wealthos.git
+cd wealthos
+npm install
+```
+
+**2. Configure environment**
+```bash
+cp .env.example .env.local
+```
+
+Fill in `.env.local`:
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_publishable_key
+SUPABASE_SERVICE_ROLE_KEY=your_secret_key
+ANTHROPIC_API_KEY=sk-ant-...          # optional if using Gemini
+GEMINI_API_KEY=AIza...                # optional if using Claude
+RESEND_API_KEY=re_...                 # optional, for email alerts
+ALERT_EMAIL=your@email.com
+CRON_SECRET=any-random-string
+AI_PROVIDER=anthropic                 # or gemini
+```
+
+**3. Set up Supabase database**
+
+Run the SQL in `docs/schema.sql` in your Supabase SQL Editor. Enable the pgvector extension first:
+```sql
+create extension if not exists vector;
+```
+
+**4. Configure Google OAuth**
+
+- Go to [Google Cloud Console](https://console.cloud.google.com) → APIs & Services → Credentials
+- Create OAuth 2.0 Client ID (Web application)
+- Add authorized redirect URI: `https://your-project.supabase.co/auth/v1/callback`
+- Copy Client ID and Secret into Supabase → Authentication → Providers → Google
+
+**5. Run locally**
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000)
+
+**6. Backfill embeddings** (after first upload)
+
+Hit `GET /api/admin/embed-all` once to generate embeddings for existing snapshots.
+
+### Deploy to Vercel
+
+```bash
+# Push to GitHub, then:
+# vercel.com → Import project → add environment variables → deploy
+```
+
+Add your Vercel URL to:
+- Supabase → Authentication → URL Configuration → Site URL
+- Supabase → Authentication → Redirect URLs
+- Google OAuth → Authorized redirect URIs
+
+---
+
+## Usage
+
+**1. Import your portfolio**
+- Kite: download holdings CSV from Zerodha → Console → Portfolio → Holdings → Download
+- Groww: download MF statement from Groww → Mutual Funds → Statements → Portfolio Statement (XLSX)
+
+**2. Generate insights**
+Click "Generate" on the dashboard for a quick analysis or go to Insights for a deep report.
+
+**3. Chat with your portfolio**
+Ask the Advisor anything: "which positions should I exit?", "what's my tax liability if I sell JIOFIN?", "am I overexposed to PSU stocks?"
+
+**4. Track goals**
+Set a target corpus under Goals. WealthOS tracks your combined equity + MF progress toward it.
+
+---
+
+## Project structure
+
+```
+src/
+├── app/                    # Next.js App Router pages and API routes
+│   ├── (dashboard)/        # Protected pages: dashboard, insights, timeline, advisor, goals, settings
+│   ├── api/                # API routes: upload, snapshots, insights, advisor/chat, goals, daily-analysis
+│   └── login/              # Google OAuth login page
+├── components/             # React components
+├── features/ai/            # Prompt builders for each AI use case
+├── lib/
+│   ├── ai/                 # client.ts (chat), embeddings.ts, retrieval.ts
+│   ├── db/                 # Supabase client
+│   └── finance/            # Pure TS: calculations, diff, tax, risk, sectors, health, goals
+├── parsers/                # Kite CSV and Groww XLSX parsers
+└── types/                  # TypeScript types for portfolio, DB, and AI responses
+```
+
+---
+
+## Key design decisions
+
+**Why no LangChain/LangGraph?** Premature orchestration complexity. The intelligence here is deterministic calculation + single LLM call. LangGraph becomes relevant when scheduling autonomous workflows — deferred until needed.
+
+**Why Next.js API routes instead of FastAPI?** Single repo, faster iteration. FastAPI migration path is clean when Python-native ML is needed.
+
+**Why pgvector instead of Pinecone?** Data already lives in Supabase. Zero additional infrastructure. Performs identically at this scale.
+
+**Why record-based chunking?** Financial data is event-structured. Sliding window would split a holding's symbol, value, and date across chunks, breaking retrieval precision.
+
+**Why Gemini for embeddings?** Free tier, no billing required. Fixed at 768 dimensions with MRL truncation for pgvector compatibility.
+
+---
+
+## Roadmap
+
+- [ ] Daily cron + Resend email alerts
+- [ ] Nifty 50 benchmark comparison
+- [ ] Mobile responsive layout
+- [ ] Broker API sync (Kite Connect)
+- [ ] Multi-user SaaS mode
+- [ ] LangGraph for scheduled autonomous analysis
+
+---
+
+## License
+
+MIT — free to self-host, modify, and distribute.
+
+---
+
+## Author
+
+Built by **Kartik Kakad** — Full Stack Developer @ Deloitte USI
+
+[GitHub](https://github.com/kartik70) · [LinkedIn](linkedin.com/in/kartik-kakad) · [Email](mailto:kartikkakad007@gmail.com)
+
+---
+
+*This is not SEBI-registered investment advice. WealthOS is a portfolio intelligence tool, not a financial advisor.*

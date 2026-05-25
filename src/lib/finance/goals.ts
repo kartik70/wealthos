@@ -12,19 +12,19 @@ export function calcLumpSumProjection(
 }
 
 export function calcGoalProgress(
-  currentValue: number,
+  combinedPortfolioValue: number,
   targetCorpus: number,
 ): number {
   if (targetCorpus <= 0) {
     return 0;
   }
 
-  const progress = (currentValue / targetCorpus) * 100;
+  const progress = (combinedPortfolioValue / targetCorpus) * 100;
   return Math.max(0, Math.min(100, progress));
 }
 
 export function calcYearsToGoal(
-  currentValue: number,
+  combinedPortfolioValue: number,
   targetCorpus: number,
   annualReturn: number,
 ): number {
@@ -32,11 +32,11 @@ export function calcYearsToGoal(
     return 0;
   }
 
-  if (currentValue >= targetCorpus) {
+  if (combinedPortfolioValue >= targetCorpus) {
     return 0;
   }
 
-  if (currentValue <= 0) {
+  if (combinedPortfolioValue <= 0) {
     return Number.POSITIVE_INFINITY;
   }
 
@@ -45,7 +45,7 @@ export function calcYearsToGoal(
     return Number.POSITIVE_INFINITY;
   }
 
-  const numerator = Math.log(targetCorpus / currentValue);
+  const numerator = Math.log(targetCorpus / combinedPortfolioValue);
   const denominator = Math.log(1 + annualRate);
 
   if (denominator === 0) {

@@ -227,17 +227,27 @@ export async function embedGoals(userId: string, apiKey?: string): Promise<void>
     .eq("user_id", userId)
     .eq("chunk_type", "goal_summary");
 
-  const [{ data: goals, error: goalsError }, { data: latestSnapshot, error: snapshotError }] =
-    await Promise.all([
-      supabase.from("goals").select("*").eq("user_id", userId),
-      supabase
-        .from("portfolio_snapshots")
-        .select("id, total_value")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
+  const [
+    { data: goals, error: goalsError },
+    { data: latestSnapshot, error: snapshotError },
+    { data: latestMfSnapshot, error: mfSnapshotError },
+  ] = await Promise.all([
+    supabase.from("goals").select("*").eq("user_id", userId),
+    supabase
+      .from("portfolio_snapshots")
+      .select("id, total_value")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("mutual_fund_snapshots")
+      .select("total_current_value")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   if (goalsError !== null) {
     throw new Error(`Failed to fetch goals for embedding: ${goalsError.message}`);
@@ -247,11 +257,17 @@ export async function embedGoals(userId: string, apiKey?: string): Promise<void>
     throw new Error(`Failed to fetch latest snapshot for goal embeddings: ${snapshotError.message}`);
   }
 
+  if (mfSnapshotError !== null) {
+    throw new Error(`Failed to fetch latest MF snapshot for goal embeddings: ${mfSnapshotError.message}`);
+  }
+
   if (goals === null || goals.length === 0 || latestSnapshot === null) {
     return;
   }
 
-  const currentValue = latestSnapshot.total_value;
+  const equityValue = latestSnapshot.total_value;
+  const mfValue = latestMfSnapshot?.total_current_value ?? 0;
+  const combinedValue = equityValue + mfValue;
   const snapshotId = latestSnapshot.id;
   const now = Date.now();
 
@@ -264,11 +280,11 @@ export async function embedGoals(userId: string, apiKey?: string): Promise<void>
       : 0;
 
     const projectedValue = calcLumpSumProjection(
-      currentValue,
+      combinedValue,
       goal.expected_return,
       yearsRemaining,
     );
-    const progress = calcGoalProgress(currentValue, goal.target_corpus);
+    const progress = calcGoalProgress(combinedValue, goal.target_corpus);
     const status = getGoalStatus(projectedValue, goal.target_corpus);
 
     const targetDateFormatted = new Date(goal.target_date).toLocaleDateString("en-IN", {
@@ -277,7 +293,7 @@ export async function embedGoals(userId: string, apiKey?: string): Promise<void>
       day: "numeric",
     });
 
-    const content = `Goal: ${goal.name}. Target corpus ₹${goal.target_corpus.toFixed(0)} by ${targetDateFormatted}. Expected return ${goal.expected_return.toFixed(1)}%. Current portfolio value ₹${currentValue.toFixed(0)}. Progress ${progress.toFixed(1)}%. Status: ${status}. Years remaining: ${yearsRemaining.toFixed(1)}.`;
+    const content = `Goal: ${goal.name}. Target corpus ₹${goal.target_corpus.toFixed(0)} by ${targetDateFormatted}. Expected return ${goal.expected_return.toFixed(1)}%. Current combined portfolio value ₹${combinedValue.toFixed(0)} (equity ₹${equityValue.toFixed(0)} + MF ₹${mfValue.toFixed(0)}). Progress ${progress.toFixed(1)}%. Status: ${status}. Years remaining: ${yearsRemaining.toFixed(1)}.`;
 
     const embedding = await generateEmbedding(content, apiKey);
     rows.push({

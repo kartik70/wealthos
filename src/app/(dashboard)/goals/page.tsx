@@ -22,6 +22,8 @@ import type { GoalRow } from "@/types/db";
 interface GoalsResponse {
   goals: GoalRow[];
   currentPortfolioValue: number;
+  equityValue: number;
+  mutualFundValue: number;
 }
 
 interface GoalDraft {
@@ -59,6 +61,8 @@ const DEFAULT_DRAFT: GoalDraft = {
 export default function GoalsPage() {
   const [goals, setGoals] = useState<GoalRow[]>([]);
   const [currentPortfolioValue, setCurrentPortfolioValue] = useState(0);
+  const [equityValue, setEquityValue] = useState(0);
+  const [mutualFundValue, setMutualFundValue] = useState(0);
   const [draft, setDraft] = useState<GoalDraft>(DEFAULT_DRAFT);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -80,6 +84,8 @@ export default function GoalsPage() {
 
       setGoals(payload.goals ?? []);
       setCurrentPortfolioValue(payload.currentPortfolioValue ?? 0);
+      setEquityValue(payload.equityValue ?? 0);
+      setMutualFundValue(payload.mutualFundValue ?? 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch goals");
     } finally {
@@ -310,6 +316,9 @@ export default function GoalsPage() {
                         {currencyFormatter.format(currentPortfolioValue)} of {currencyFormatter.format(targetCorpus)}
                       </span>
                       <StatusBadge status={status} />
+                    </div>
+                    <div className="text-[11px] text-muted-foreground/80">
+                      Equity {currencyFormatter.format(equityValue)} + MF {currencyFormatter.format(mutualFundValue)} = {currencyFormatter.format(currentPortfolioValue)} total
                     </div>
                   </div>
                 </CardContent>
