@@ -4,14 +4,18 @@ import {
   calcAllocationPct,
   calcPortfolioTotals,
 } from "../../../lib/finance/calculations";
-import { buildMutualFundPromptSection } from "../../../features/ai/promptBuilder";
+import { buildPortfolioPrompt } from "../../../features/ai/promptBuilder";
 import { getAIProviderFromRequest, isAIProvider } from "../../../lib/ai/provider";
 import {
   getEffectiveApiKey,
   NO_API_KEY_CONFIGURED_MESSAGE,
 } from "@/lib/ai/user-api-keys";
 import type { Database, Json, MutualFundHoldingRow } from "../../../types/db";
-import type { Holding, MutualFundHolding, MutualFundTotals } from "../../../types/portfolio";
+import type {
+  Holding,
+  MutualFundHolding,
+  MutualFundTotals,
+} from "../../../types/portfolio";
 import type { AIProvider } from "../../../lib/ai/provider";
 
 export const runtime = "nodejs";
@@ -109,11 +113,19 @@ export async function POST(request: Request): Promise<Response> {
     const insight = await generateInsight(prompt, provider, apiKey);
     // Never trust the model's generatedAt — overwrite with server time.
     insight.generatedAt = new Date().toISOString();
+    const persistedPayload = {
+      investorRiskProfile: insight.investorRiskProfile,
+      stockVerdicts: insight.stockVerdicts,
+      mfVerdicts: insight.mfVerdicts,
+      portfolioStructure: insight.portfolioStructure,
+      taxSummary: insight.taxSummary,
+      priorityActions: insight.priorityActions,
+    };
     const { error: insertError } = await supabase.from("ai_insights").insert({
       snapshot_id: snapshot.id,
       user_id: userId,
       summary: insight.summary,
-      recommendations: insight.recommendations as unknown as Json,
+      recommendations: persistedPayload as unknown as Json,
       alerts: insight.alerts as unknown as Json,
       trigger: "manual",
     });
@@ -263,47 +275,18 @@ function buildInsightPrompt(
   metrics: PortfolioMetrics,
   mutualFundContext: { totals: MutualFundTotals; holdings: MutualFundHolding[] } | null,
 ): string {
-  const promptPayload = {
+  return buildPortfolioPrompt({
     snapshot: {
       id: snapshot.id,
       createdAt: snapshot.created_at,
-      source: snapshot.source,
+      totalValue: metrics.totalValue,
+      totalCost: metrics.totalCost,
+      totalGain: metrics.totalGain,
+      totalGainPct: metrics.totalGainPct,
+      source: (snapshot.source ?? "manual") as "kite" | "groww" | "manual",
     },
-    metrics,
-    mutualFunds: mutualFundContext,
-  };
-
-  const mutualFundSection =
-    mutualFundContext !== null
-      ? `\n\n${buildMutualFundPromptSection(
-          mutualFundContext.totals,
-          mutualFundContext.holdings,
-        )}`
-      : "";
-
-  return `You are the interpretation layer for WealthOS, a personal portfolio intelligence product.
-
-Do not calculate returns, P&L, allocation percentages, tax liability, risk metrics, or concentration ratios. Use only the pre-calculated numbers provided below.
-
-Return only valid JSON matching this TypeScript interface:
-{
-  "summary": string,
-  "recommendations": Array<{
-    "action": "BUY" | "SELL" | "HOLD" | "REVIEW",
-    "symbol": string,
-    "reason": string,
-    "priority": "LOW" | "MEDIUM" | "HIGH"
-  }>,
-  "alerts": Array<{
-    "type": "CONCENTRATION" | "TAX" | "LOSS" | "GOAL" | "REBALANCE",
-    "message": string,
-    "urgency": "INFO" | "WARNING" | "ACTION_NEEDED"
-  }>,
-  "generatedAt": string
-}
-
-Use generatedAt as the current ISO timestamp. Keep the output concise and factual. This is not financial advice and must not predict prices.
-
-Pre-calculated portfolio data:
-${JSON.stringify(promptPayload, null, 2)}${mutualFundSection}`;
+    holdings: metrics.holdings,
+    mfTotals: mutualFundContext?.totals,
+    mfHoldings: mutualFundContext?.holdings,
+  });
 }

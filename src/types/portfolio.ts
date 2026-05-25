@@ -87,18 +87,65 @@ export interface TaxSummary {
   harvestingOpportunities: HarvestingOpportunity[];
 }
 
-export interface InsightResponse {
-  summary: string;
-  recommendations: Recommendation[];
-  alerts: Alert[];
-  generatedAt: string;
+export type InvestorRiskProfile = "AGGRESSIVE" | "MODERATE" | "CONSERVATIVE";
+
+export interface StockVerdict {
+  symbol: string;
+  classification: "SHORT_TERM_PUNT" | "LONG_TERM_HOLD";
+  verdict:
+    | "BOOK_PROFIT_FULL"
+    | "BOOK_PROFIT_PARTIAL"
+    | "HOLD"
+    | "EXIT"
+    | "HOLD_TRIM";
+  reasoning: string;
+  ltcgNote: string | null;
+  taxImplication: string | null;
+  priority: "LOW" | "MEDIUM" | "HIGH";
 }
 
-export interface Recommendation {
-  action: "BUY" | "SELL" | "HOLD" | "REVIEW";
-  symbol: string;
-  reason: string;
+export interface MFVerdict {
+  schemeName: string;
+  planType: "DIRECT" | "REGULAR" | "UNKNOWN";
+  category: string;
+  verdict: "CONTINUE" | "INCREASE_SIP" | "REDUCE_SIP" | "SWITCH" | "EXIT";
+  reasoning: string;
+  switchTo: string | null;
   priority: "LOW" | "MEDIUM" | "HIGH";
+}
+
+export interface PriorityAction {
+  rank: number;
+  urgency: "URGENT" | "THIS_WEEK" | "THIS_MONTH";
+  action: string;
+  impact: "HIGH" | "MEDIUM" | "LOW";
+  rupeesImpacted: number | null;
+}
+
+export interface PortfolioStructureCommentary {
+  sectorConcentration: string;
+  psuVsPrivate: string;
+  equityVsMFSplit: string;
+  sectorOverlap: string;
+}
+
+export interface InsightTaxSummary {
+  estimatedSTCG: number;
+  estimatedLTCG: number;
+  ltcgThresholdWarning: boolean;
+  harvestingOpportunities: string[];
+}
+
+export interface InsightResponse {
+  summary: string;
+  investorRiskProfile: InvestorRiskProfile;
+  stockVerdicts: StockVerdict[];
+  mfVerdicts: MFVerdict[];
+  portfolioStructure: PortfolioStructureCommentary;
+  taxSummary: InsightTaxSummary;
+  priorityActions: PriorityAction[];
+  alerts: Alert[];
+  generatedAt: string;
 }
 
 export interface Alert {
@@ -107,25 +154,63 @@ export interface Alert {
   urgency: "INFO" | "WARNING" | "ACTION_NEEDED";
 }
 
-export interface DetailedStockAnalysis {
-  symbol: string;
-  verdict: "AVERAGE_DOWN" | "EXIT" | "HOLD" | "BOOK_PROFIT";
-  reasoning: string;
-  taxNote: string;
+export interface SectorBreakdownEntry {
+  sector: string;
+  allocationPct: number;
+  commentary: string;
 }
 
-export interface DetailedActionPlan {
-  priority: number;
-  action: string;
-  impact: "HIGH" | "MEDIUM" | "LOW";
-  urgency: "NOW" | "THIS_MONTH" | "THIS_QUARTER";
+export interface AssetAllocationEntry {
+  type: string;
+  allocationPct: number;
+}
+
+export interface HarvestingDetail {
+  name: string;
+  loss: number;
+  taxSaving: number;
+}
+
+export interface DetailedEquityStructure {
+  sectorBreakdown: SectorBreakdownEntry[];
+  psuVsPrivate: string;
+  capSplit: string;
+  topRisks: string[];
+  reinvestmentSuggestion: string;
+}
+
+export interface DetailedMFStructure {
+  assetAllocation: AssetAllocationEntry[];
+  allocationHealthComment: string;
+  amcConcentration: string;
+  goalAlignment: string;
+}
+
+export interface DetailedCombinedAnalysis {
+  equityVsMFSplit: string;
+  sectorOverlap: string;
+  healthScoreReasoning: string;
+  complementOrDuplicate: string;
+}
+
+export interface DetailedTaxOptimisation {
+  estimatedSTCG: number;
+  estimatedLTCG: number;
+  ltcgThresholdWarning: boolean;
+  harvestingOpportunities: HarvestingDetail[];
+  ltcgHoldSuggestions: string[];
 }
 
 export interface DetailedInsightResponse {
   portfolioStory: string;
-  healthcommentary: string;
-  sectorCommentary: Record<string, string>;
-  stockAnalysis: DetailedStockAnalysis[];
-  riskProfile: string;
-  actionPlan: DetailedActionPlan[];
+  investorProfile: InvestorRiskProfile;
+  investorProfileReasoning: string;
+  stockVerdicts: StockVerdict[];
+  equityStructure: DetailedEquityStructure;
+  mfVerdicts: MFVerdict[];
+  mfStructure: DetailedMFStructure;
+  combinedAnalysis: DetailedCombinedAnalysis;
+  taxOptimisation: DetailedTaxOptimisation;
+  priorityActions: PriorityAction[];
+  generatedAt: string;
 }

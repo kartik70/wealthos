@@ -557,7 +557,14 @@ function isInsightResponse(value: unknown): value is InsightResponse {
 
   return (
     typeof candidate.summary === "string" &&
-    Array.isArray(candidate.recommendations) &&
+    typeof candidate.investorRiskProfile === "string" &&
+    Array.isArray(candidate.stockVerdicts) &&
+    Array.isArray(candidate.mfVerdicts) &&
+    typeof candidate.portfolioStructure === "object" &&
+    candidate.portfolioStructure !== null &&
+    typeof candidate.taxSummary === "object" &&
+    candidate.taxSummary !== null &&
+    Array.isArray(candidate.priorityActions) &&
     Array.isArray(candidate.alerts) &&
     typeof candidate.generatedAt === "string"
   );

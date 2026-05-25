@@ -179,16 +179,41 @@ export async function GET(): Promise<Response> {
         console.error("Failed to fetch insight:", insightError.message);
       }
 
+      const persistedExtras = (insightRow?.recommendations ?? null) as unknown as
+        | {
+            investorRiskProfile?: InsightResponse["investorRiskProfile"];
+            stockVerdicts?: InsightResponse["stockVerdicts"];
+            mfVerdicts?: InsightResponse["mfVerdicts"];
+            portfolioStructure?: InsightResponse["portfolioStructure"];
+            taxSummary?: InsightResponse["taxSummary"];
+            priorityActions?: InsightResponse["priorityActions"];
+          }
+        | null;
+
       const insight =
         insightRow &&
         insightRow.summary &&
-        insightRow.recommendations &&
-        insightRow.alerts
+        persistedExtras !== null &&
+        persistedExtras.investorRiskProfile !== undefined
           ? {
               summary: insightRow.summary as string,
-              recommendations:
-                insightRow.recommendations as unknown as InsightResponse["recommendations"],
-              alerts: insightRow.alerts as unknown as InsightResponse["alerts"],
+              investorRiskProfile: persistedExtras.investorRiskProfile,
+              stockVerdicts: persistedExtras.stockVerdicts ?? [],
+              mfVerdicts: persistedExtras.mfVerdicts ?? [],
+              portfolioStructure: persistedExtras.portfolioStructure ?? {
+                sectorConcentration: "",
+                psuVsPrivate: "",
+                equityVsMFSplit: "",
+                sectorOverlap: "",
+              },
+              taxSummary: persistedExtras.taxSummary ?? {
+                estimatedSTCG: 0,
+                estimatedLTCG: 0,
+                ltcgThresholdWarning: false,
+                harvestingOpportunities: [],
+              },
+              priorityActions: persistedExtras.priorityActions ?? [],
+              alerts: (insightRow.alerts ?? []) as unknown as InsightResponse["alerts"],
               generatedAt: insightRow.created_at || new Date().toISOString(),
             }
           : undefined;

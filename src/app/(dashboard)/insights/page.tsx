@@ -18,16 +18,16 @@ import {
 import { withAIProviderHeaders } from "@/lib/ai/provider";
 import { calcHealthScore } from "@/lib/finance/health";
 import { classifySectorsSync } from "@/lib/finance/sector-map";
-import { calcTaxSummary } from "@/lib/finance/tax";
 import { cn } from "@/lib/utils";
 import type {
-  DetailedActionPlan,
   DetailedInsightResponse,
-  DetailedStockAnalysis,
-  Holding,
   HealthScoreResult,
+  Holding,
+  InvestorRiskProfile,
+  MFVerdict,
+  PriorityAction,
   SectorAllocation,
-  TaxSummary,
+  StockVerdict,
 } from "@/types/portfolio";
 
 interface LatestSnapshotResponse {
@@ -70,15 +70,6 @@ const sectorColors: Record<string, string> = {
   "Technology": "#888888",
   "Other": "#888888",
 };
-
-const sectionOrder = [
-  "Health Score",
-  "Sector Allocation",
-  "Action Plan",
-  "Stock Analysis",
-  "Tax Summary",
-  "Risk Profile",
-] as const;
 
 export default function InsightsPage() {
   const [snapshotId, setSnapshotId] = useState<string | null>(null);
@@ -142,16 +133,31 @@ export default function InsightsPage() {
 
   const healthScore = useMemo<HealthScoreResult>(() => calcHealthScore(holdings), [holdings]);
   const sectors = useMemo<SectorAllocation[]>(() => classifySectorsSync(holdings), [holdings]);
-  const taxSummary = useMemo<TaxSummary>(() => calcTaxSummary(holdings), [holdings]);
 
-  const sortedActionPlan = useMemo<DetailedActionPlan[]>(() => {
-    return insight ? [...insight.actionPlan].sort((left, right) => left.priority - right.priority) : [];
+  const sortedStockVerdicts = useMemo<StockVerdict[]>(() => {
+    if (insight === null) return [];
+    const priorityRank = { HIGH: 0, MEDIUM: 1, LOW: 2 } as const;
+    return [...insight.stockVerdicts].sort(
+      (a, b) =>
+        priorityRank[a.priority] - priorityRank[b.priority] ||
+        a.symbol.localeCompare(b.symbol),
+    );
   }, [insight]);
 
-  const sortedStockAnalysis = useMemo<DetailedStockAnalysis[]>(() => {
-    return insight
-      ? [...insight.stockAnalysis].sort((left, right) => left.symbol.localeCompare(right.symbol))
-      : [];
+  const sortedMFVerdicts = useMemo<MFVerdict[]>(() => {
+    if (insight === null) return [];
+    const priorityRank = { HIGH: 0, MEDIUM: 1, LOW: 2 } as const;
+    return [...insight.mfVerdicts].sort(
+      (a, b) =>
+        priorityRank[a.priority] - priorityRank[b.priority] ||
+        a.schemeName.localeCompare(b.schemeName),
+    );
+  }, [insight]);
+
+  const sortedPriorityActions = useMemo<PriorityAction[]>(() => {
+    return insight === null
+      ? []
+      : [...insight.priorityActions].sort((a, b) => a.rank - b.rank);
   }, [insight]);
 
   async function handleGenerateDeepAnalysis() {
@@ -217,6 +223,15 @@ export default function InsightsPage() {
   const circumference = 2 * Math.PI * radius;
   const progressOffset = circumference - (healthScore.score / 100) * circumference;
 
+  const sectorCommentaryMap = useMemo<Record<string, string>>(() => {
+    if (insight === null) return {};
+    const map: Record<string, string> = {};
+    for (const entry of insight.equityStructure.sectorBreakdown) {
+      map[entry.sector] = entry.commentary;
+    }
+    return map;
+  }, [insight]);
+
   if (isLoadingSnapshot) {
     return (
       <div className="animate-in fade-in-0 duration-300 grid gap-4 py-2">
@@ -259,7 +274,6 @@ export default function InsightsPage() {
       {/* Page Header */}
       <div className="mb-8 flex flex-col gap-4 border-b border-border pb-6">
         <div className="flex items-start justify-between gap-6">
-
           <div className="flex-1">
             <h1 className="font-heading text-2xl font-semibold tracking-tight">Insights</h1>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -309,263 +323,419 @@ export default function InsightsPage() {
 
       {insight !== null && (
         <>
+          {/* 1. Portfolio Story */}
+          {insight.portfolioStory && (
+            <blockquote className="mb-12 border-l-4 border-primary pl-6 py-2 text-lg font-light leading-relaxed text-foreground">
+              {insight.portfolioStory}
+            </blockquote>
+          )}
 
-      {/* Portfolio Story */}
-      {insight.portfolioStory && (
-        <blockquote className="mb-12 border-l-4 border-primary pl-6 py-2 text-lg font-light leading-relaxed text-foreground">
-          {insight.portfolioStory}
-        </blockquote>
-      )}
-
-      {/* Health Score Section */}
-      <section className="mb-12">
-        <SectionHeading label={sectionOrder[0]} />
-
-        <div className="grid gap-12 lg:grid-cols-[200px_1fr]">
-          {/* Left: Large Score with Ring */}
-          <div className="flex items-center justify-center">
-            <div className="relative size-40">
-              <svg viewBox="0 0 120 120" className="size-full">
-                {/* Background circle */}
-                <circle cx="60" cy="60" r="52" fill="none" stroke="#e5e7eb" strokeWidth="8" />
-                {/* Progress circle */}
-                <circle
-                  cx="60"
-                  cy="60"
-                  r="52"
-                  fill="none"
-                  stroke={strokeColor}
-                  strokeWidth="8"
-                  strokeLinecap="round"
-                  strokeDasharray={circumference}
-                  strokeDashoffset={progressOffset}
-                  className="transition-all"
-                  transform="rotate(-90 60 60)"
-                />
-                {/* Score text */}
-                <text
-                  x="60"
-                  y="66"
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fontSize="48"
-                  fontWeight="300"
-                  fontFamily="monospace"
-                  fill="currentColor"
-                  className={healthTone}
-                >
-                  {healthScore.score}
-                </text>
-              </svg>
-            </div>
-          </div>
-
-          {/* Right: Breakdown Bars */}
-          <div className="space-y-6">
-            {[
-              { label: "Concentration", value: healthScore.breakdown.concentration },
-              { label: "Diversification", value: healthScore.breakdown.diversification },
-              { label: "Loss Ratio", value: healthScore.breakdown.lossRatio },
-              { label: "Sector Balance", value: healthScore.breakdown.sectorBalance },
-            ].map(({ label, value }) => (
-              <div key={label} className="space-y-2">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground">{label}</span>
-                  <span className="font-mono text-sm text-foreground">{value}</span>
-                </div>
-                <div className="h-1 w-full rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-foreground/70" style={{ width: `${value}%` }} />
-                </div>
+          {/* 2. Investor Profile */}
+          <section className="mb-12">
+            <SectionHeading label="Investor Profile" />
+            <div className="flex flex-col gap-4">
+              <div>
+                <RiskProfileBadge profile={insight.investorProfile} />
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Commentary */}
-        <div className="mt-8 rounded-lg bg-muted/40 p-4 text-sm leading-relaxed text-foreground">
-          {insight.healthcommentary ??
-            "Generate report to see AI insights on portfolio health drivers and improvement opportunities."}
-        </div>
-      </section>
-
-      {/* Sector Allocation Section */}
-      <section className="mb-12">
-        <SectionHeading label={sectionOrder[1]} />
-
-        {/* Stacked Bar */}
-        <div className="mb-8 relative">
-          <div className="flex h-8 w-full overflow-hidden rounded-full bg-muted relative z-0">
-            {sectors.map((sector) => (
-              <div
-                key={sector.sector}
-                className="h-full border-r border-background/30 last:border-r-0 relative group cursor-pointer transition-opacity hover:opacity-80"
-                style={{
-                  width: `${sector.allocationPct}%`,
-                  backgroundColor: sectorColors[sector.sector] || sectorColors["Other"],
-                }}
-                onMouseEnter={() => setHoveredSector(sector.sector)}
-                onMouseLeave={() => setHoveredSector(null)}
-              />
-            ))}
-          </div>
-          {/* Tooltip rendered above bar, not clipped */}
-          {hoveredSector && (() => {
-            const hovered = sectors.find(s => s.sector === hoveredSector);
-            if (!hovered) return null;
-            // Calculate left offset for tooltip center
-            let left = 0;
-            for (const s of sectors) {
-              if (s.sector === hoveredSector) {
-                left += (s.allocationPct / 2);
-                break;
-              }
-              left += s.allocationPct;
-            }
-            return (
-              <div
-                className="absolute z-20 pointer-events-none"
-                style={{
-                  left: `calc(${left}% )`,
-                  top: '-0.5rem',
-                  transform: 'translateX(-50%) translateY(-100%)',
-                }}
-              >
-                <div className="px-3 py-1.5 bg-foreground text-background text-xs font-mono rounded whitespace-nowrap shadow-lg">
-                  {hovered.sector}: {percentFormatter.format(hovered.allocationPct)}%
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-
-        {/* Sector Rows */}
-        <div className="space-y-0 divide-y divide-border">
-          {sectors.map((sector) => (
-            <div key={sector.sector} className="border-l-4 py-4 pl-4" style={{ borderLeftColor: `var(--${getSectorColorVariable(sector.sector)})` }}>
-              <div className="flex items-start justify-between gap-4 mb-2">
-                <span className="font-semibold text-foreground">{sector.sector}</span>
-                <span className="font-mono text-sm text-muted-foreground">{percentFormatter.format(sector.allocationPct)}%</span>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {insight.sectorCommentary?.[sector.sector] ?? "No AI commentary available for this sector yet."}
+              <p className="text-sm leading-relaxed text-foreground">
+                {insight.investorProfileReasoning}
               </p>
             </div>
-          ))}
-        </div>
-      </section>
+          </section>
 
-      {/* Action Plan Section */}
-      <section className="mb-12">
-        <SectionHeading label={sectionOrder[2]} />
+          {/* 3. Health Score */}
+          <section className="mb-12">
+            <SectionHeading label="Health Score" />
 
-        {sortedActionPlan.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic">Generate report to receive AI-prioritized action items.</p>
-        ) : (
-          <div className="space-y-0 divide-y divide-border">
-            {sortedActionPlan.map((plan) => (
-              <div key={`${plan.priority}-${plan.action}`} className="flex items-center gap-6 border-b py-6 last:border-b-0">
-                <div className="flex-shrink-0">
-                  <p className="font-mono text-4xl font-light text-muted-foreground/30">{plan.priority}</p>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">{plan.action}</p>
-                </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <ImpactBadge impact={plan.impact} />
-                  <UrgencyBadge urgency={plan.urgency} />
+            <div className="grid gap-12 lg:grid-cols-[200px_1fr]">
+              <div className="flex items-center justify-center">
+                <div className="relative size-40">
+                  <svg viewBox="0 0 120 120" className="size-full">
+                    <circle cx="60" cy="60" r="52" fill="none" stroke="#e5e7eb" strokeWidth="8" />
+                    <circle
+                      cx="60"
+                      cy="60"
+                      r="52"
+                      fill="none"
+                      stroke={strokeColor}
+                      strokeWidth="8"
+                      strokeLinecap="round"
+                      strokeDasharray={circumference}
+                      strokeDashoffset={progressOffset}
+                      className="transition-all"
+                      transform="rotate(-90 60 60)"
+                    />
+                    <text
+                      x="60"
+                      y="66"
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize="48"
+                      fontWeight="300"
+                      fontFamily="monospace"
+                      fill="currentColor"
+                      className={healthTone}
+                    >
+                      {healthScore.score}
+                    </text>
+                  </svg>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
 
-      {/* Stock Analysis Section */}
-      <section className="mb-12">
-        <SectionHeading label={sectionOrder[3]} />
-
-        {sortedStockAnalysis.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic">Generate report to see stock-level analysis and verdicts.</p>
-        ) : (
-          <div className="space-y-0 divide-y divide-border">
-            {sortedStockAnalysis.map((entry, idx) => (
-              <div
-                key={entry.symbol}
-                className={cn("flex items-start gap-4 py-4", idx % 2 === 0 ? "bg-muted/20" : "")}
-              >
-                <span className="w-20 font-mono font-medium text-foreground flex-shrink-0">{entry.symbol}</span>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <VerdictBadge verdict={entry.verdict} />
-                </div>
-                <p className="flex-1 text-sm text-muted-foreground">{entry.reasoning}</p>
-                <p className="text-xs text-muted-foreground italic flex-shrink-0 max-w-xs text-right">{entry.taxNote}</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Tax Summary Section */}
-      <section className="mb-12">
-        <SectionHeading label={sectionOrder[4]} />
-
-        <div className="mb-8 grid gap-4 md:grid-cols-3">
-          <div className="rounded-lg border border-border bg-card p-4 pt-0">
-            <div className="border-t-2 border-red-500 pt-4">
-              <p className="text-xs font-medium text-muted-foreground mb-2">ESTIMATED STCG LIABILITY</p>
-              <p className="text-2xl font-semibold text-foreground">{rupeeFormatter.format(taxSummary.estimatedSTCG)}</p>
-            </div>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-4 pt-0">
-            <div className="border-t-2 border-amber-500 pt-4">
-              <p className="text-xs font-medium text-muted-foreground mb-2">ESTIMATED LTCG LIABILITY</p>
-              <p className="text-2xl font-semibold text-foreground">{rupeeFormatter.format(taxSummary.estimatedLTCG)}</p>
-            </div>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-4 pt-0">
-            <div className="border-t-2 border-green-500 pt-4">
-              <p className="text-xs font-medium text-muted-foreground mb-2">HARVESTING OPPORTUNITIES</p>
-              <p className="text-2xl font-semibold text-foreground">{taxSummary.harvestingOpportunities.length}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Harvesting Table */}
-        {taxSummary.harvestingOpportunities.length > 0 && (
-          <div className="rounded-lg border border-border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-b border-border">
-                  <TableHead>Symbol</TableHead>
-                  <TableHead className="text-right">Unrealised Loss</TableHead>
-                  <TableHead className="text-right">Potential Tax Saving</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {taxSummary.harvestingOpportunities.map((opportunity, idx) => (
-                  <TableRow key={opportunity.symbol} className={cn(idx % 2 === 0 ? "bg-muted/20" : "")}>
-                    <TableCell className="font-mono font-medium">{opportunity.symbol}</TableCell>
-                    <TableCell className="text-right text-[color:var(--loss)]">{rupeeFormatter.format(opportunity.loss)}</TableCell>
-                    <TableCell className="text-right text-[color:var(--gain)]">
-                      {rupeeFormatter.format(opportunity.saving)}
-                    </TableCell>
-                  </TableRow>
+              <div className="space-y-6">
+                {[
+                  { label: "Concentration", value: healthScore.breakdown.concentration },
+                  { label: "Diversification", value: healthScore.breakdown.diversification },
+                  { label: "Loss Ratio", value: healthScore.breakdown.lossRatio },
+                  { label: "Sector Balance", value: healthScore.breakdown.sectorBalance },
+                ].map(({ label, value }) => (
+                  <div key={label} className="space-y-2">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground">{label}</span>
+                      <span className="font-mono text-sm text-foreground">{value}</span>
+                    </div>
+                    <div className="h-1 w-full rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-foreground/70" style={{ width: `${value}%` }} />
+                    </div>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </section>
+              </div>
+            </div>
 
-      {/* Risk Profile Section */}
-      <section className="mb-12">
-        <SectionHeading label={sectionOrder[5]} />
+            <div className="mt-8 rounded-lg bg-muted/40 p-4 text-sm leading-relaxed text-foreground">
+              {insight.combinedAnalysis.healthScoreReasoning}
+            </div>
+          </section>
 
-        <blockquote className="rounded-xl border border-border bg-muted/40 p-8 text-base font-light leading-relaxed italic text-foreground">
-          {insight.riskProfile ?? "Generate report to understand the investor profile reflected by this portfolio."}
-        </blockquote>
-      </section>
-      </>
+          {/* 4. Equity Structure */}
+          <section className="mb-12">
+            <SectionHeading label="Equity Structure" />
+
+            {/* Stacked sector bar */}
+            <div className="mb-8 relative">
+              <div className="flex h-8 w-full overflow-hidden rounded-full bg-muted relative z-0">
+                {sectors.map((sector) => (
+                  <div
+                    key={sector.sector}
+                    className="h-full border-r border-background/30 last:border-r-0 relative group cursor-pointer transition-opacity hover:opacity-80"
+                    style={{
+                      width: `${sector.allocationPct}%`,
+                      backgroundColor: sectorColors[sector.sector] || sectorColors["Other"],
+                    }}
+                    onMouseEnter={() => setHoveredSector(sector.sector)}
+                    onMouseLeave={() => setHoveredSector(null)}
+                  />
+                ))}
+              </div>
+              {hoveredSector && (() => {
+                const hovered = sectors.find(s => s.sector === hoveredSector);
+                if (!hovered) return null;
+                let left = 0;
+                for (const s of sectors) {
+                  if (s.sector === hoveredSector) {
+                    left += (s.allocationPct / 2);
+                    break;
+                  }
+                  left += s.allocationPct;
+                }
+                return (
+                  <div
+                    className="absolute z-20 pointer-events-none"
+                    style={{
+                      left: `calc(${left}% )`,
+                      top: '-0.5rem',
+                      transform: 'translateX(-50%) translateY(-100%)',
+                    }}
+                  >
+                    <div className="px-3 py-1.5 bg-foreground text-background text-xs font-mono rounded whitespace-nowrap shadow-lg">
+                      {hovered.sector}: {percentFormatter.format(hovered.allocationPct)}%
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Sector commentary rows */}
+            <div className="space-y-0 divide-y divide-border mb-8">
+              {sectors.map((sector) => (
+                <div
+                  key={sector.sector}
+                  className="border-l-4 py-4 pl-4"
+                  style={{ borderLeftColor: sectorColors[sector.sector] || sectorColors["Other"] }}
+                >
+                  <div className="flex items-start justify-between gap-4 mb-2">
+                    <span className="font-semibold text-foreground">{sector.sector}</span>
+                    <span className="font-mono text-sm text-muted-foreground">{percentFormatter.format(sector.allocationPct)}%</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {sectorCommentaryMap[sector.sector] ?? "No AI commentary available for this sector yet."}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Structural commentary blocks */}
+            <div className="grid gap-4 md:grid-cols-2 mb-6">
+              <StructureBlock label="PSU vs Private" text={insight.equityStructure.psuVsPrivate} />
+              <StructureBlock label="Cap Split" text={insight.equityStructure.capSplit} />
+            </div>
+
+            {insight.equityStructure.topRisks.length > 0 && (
+              <div className="mb-6 rounded-lg border border-border bg-card p-4">
+                <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-3">Top Risks</p>
+                <ul className="list-disc list-inside space-y-1 text-sm text-foreground">
+                  {insight.equityStructure.topRisks.map((risk) => (
+                    <li key={risk}>{risk}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="rounded-lg bg-muted/40 p-4 text-sm leading-relaxed text-foreground">
+              <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground block mb-2">Reinvestment Suggestion</span>
+              {insight.equityStructure.reinvestmentSuggestion}
+            </div>
+          </section>
+
+          {/* 5. Stock Verdicts */}
+          <section className="mb-12">
+            <SectionHeading label="Stock-by-Stock Analysis" />
+
+            {sortedStockVerdicts.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic">No stock verdicts available.</p>
+            ) : (
+              <div className="rounded-lg border border-border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-b border-border">
+                      <TableHead>Symbol</TableHead>
+                      <TableHead>Class</TableHead>
+                      <TableHead>Verdict</TableHead>
+                      <TableHead>Priority</TableHead>
+                      <TableHead>Reasoning</TableHead>
+                      <TableHead>Tax Note</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedStockVerdicts.map((entry, idx) => (
+                      <TableRow key={entry.symbol} className={cn(idx % 2 === 0 ? "bg-muted/20" : "")}>
+                        <TableCell className="font-mono font-medium">{entry.symbol}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {entry.classification === "LONG_TERM_HOLD" ? "Long Term" : "Short Term"}
+                        </TableCell>
+                        <TableCell><StockVerdictBadge verdict={entry.verdict} /></TableCell>
+                        <TableCell><PriorityBadge priority={entry.priority} /></TableCell>
+                        <TableCell className="text-sm">{entry.reasoning}</TableCell>
+                        <TableCell className="text-xs italic text-muted-foreground">
+                          {entry.taxImplication ?? entry.ltcgNote ?? "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </section>
+
+          {/* 6. MF Verdicts */}
+          <section className="mb-12">
+            <SectionHeading label="Mutual Fund Analysis" />
+
+            {sortedMFVerdicts.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic">No mutual fund holdings to analyse.</p>
+            ) : (
+              <div className="rounded-lg border border-border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-b border-border">
+                      <TableHead>Scheme</TableHead>
+                      <TableHead>Plan</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Verdict</TableHead>
+                      <TableHead>Switch To</TableHead>
+                      <TableHead>Reasoning</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sortedMFVerdicts.map((entry, idx) => (
+                      <TableRow key={entry.schemeName} className={cn(idx % 2 === 0 ? "bg-muted/20" : "")}>
+                        <TableCell className="font-medium text-sm">{entry.schemeName}</TableCell>
+                        <TableCell>
+                          <span
+                            className={cn(
+                              "text-xs font-mono px-2 py-0.5 rounded border",
+                              entry.planType === "REGULAR"
+                                ? "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border-[color:var(--loss)]/30"
+                                : entry.planType === "DIRECT"
+                                  ? "bg-[color:var(--gain)]/15 text-[color:var(--gain)] border-[color:var(--gain)]/30"
+                                  : "bg-muted text-muted-foreground border-border",
+                            )}
+                          >
+                            {entry.planType}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{entry.category}</TableCell>
+                        <TableCell><MFVerdictBadge verdict={entry.verdict} /></TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{entry.switchTo ?? "—"}</TableCell>
+                        <TableCell className="text-sm">{entry.reasoning}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </section>
+
+          {/* 7. MF Structure */}
+          <section className="mb-12">
+            <SectionHeading label="MF Structure" />
+
+            {insight.mfStructure.assetAllocation.length > 0 && (
+              <div className="mb-6 space-y-3">
+                {insight.mfStructure.assetAllocation.map((entry) => (
+                  <div key={entry.type} className="space-y-1">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-sm font-medium text-foreground">{entry.type}</span>
+                      <span className="font-mono text-sm text-muted-foreground">
+                        {percentFormatter.format(entry.allocationPct)}%
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-foreground/70"
+                        style={{ width: `${Math.min(entry.allocationPct, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <StructureBlock label="Allocation Health" text={insight.mfStructure.allocationHealthComment} />
+              <StructureBlock label="AMC Concentration" text={insight.mfStructure.amcConcentration} />
+              <StructureBlock label="Goal Alignment" text={insight.mfStructure.goalAlignment} />
+            </div>
+          </section>
+
+          {/* 8. Combined Analysis */}
+          <section className="mb-12">
+            <SectionHeading label="Combined Analysis" />
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <StructureBlock label="Equity vs MF Split" text={insight.combinedAnalysis.equityVsMFSplit} />
+              <StructureBlock label="Sector Overlap" text={insight.combinedAnalysis.sectorOverlap} />
+              <StructureBlock label="Complement or Duplicate" text={insight.combinedAnalysis.complementOrDuplicate} />
+              <StructureBlock label="Health Score Reasoning" text={insight.combinedAnalysis.healthScoreReasoning} />
+            </div>
+          </section>
+
+          {/* 9. Tax Optimisation */}
+          <section className="mb-12">
+            <SectionHeading label="Tax Optimisation" />
+
+            <div className="mb-6 grid gap-4 md:grid-cols-2">
+              <div className="rounded-lg border border-border bg-card p-4 pt-0">
+                <div className="border-t-2 border-red-500 pt-4">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">ESTIMATED STCG</p>
+                  <p className="text-2xl font-semibold text-foreground">
+                    {rupeeFormatter.format(insight.taxOptimisation.estimatedSTCG)}
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-lg border border-border bg-card p-4 pt-0">
+                <div className="border-t-2 border-amber-500 pt-4">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">ESTIMATED LTCG</p>
+                  <p className="text-2xl font-semibold text-foreground">
+                    {rupeeFormatter.format(insight.taxOptimisation.estimatedLTCG)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {insight.taxOptimisation.ltcgThresholdWarning && (
+              <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+                <strong>LTCG threshold warning:</strong> Realised long-term gains are approaching or exceeding the ₹1.25L tax-free limit this financial year.
+              </div>
+            )}
+
+            {insight.taxOptimisation.harvestingOpportunities.length > 0 && (
+              <div className="mb-6 rounded-lg border border-border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-b border-border">
+                      <TableHead>Holding</TableHead>
+                      <TableHead className="text-right">Unrealised Loss</TableHead>
+                      <TableHead className="text-right">Tax Saving</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {insight.taxOptimisation.harvestingOpportunities.map((opportunity, idx) => (
+                      <TableRow key={opportunity.name} className={cn(idx % 2 === 0 ? "bg-muted/20" : "")}>
+                        <TableCell className="font-mono font-medium">{opportunity.name}</TableCell>
+                        <TableCell className="text-right text-[color:var(--loss)]">
+                          {rupeeFormatter.format(opportunity.loss)}
+                        </TableCell>
+                        <TableCell className="text-right text-[color:var(--gain)]">
+                          {rupeeFormatter.format(opportunity.taxSaving)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+
+            {insight.taxOptimisation.ltcgHoldSuggestions.length > 0 && (
+              <div className="rounded-lg border border-border bg-card p-4">
+                <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-3">
+                  LTCG Hold Suggestions
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {insight.taxOptimisation.ltcgHoldSuggestions.map((suggestion) => (
+                    <span
+                      key={suggestion}
+                      className="text-xs font-mono px-2 py-1 rounded bg-muted text-foreground border border-border"
+                    >
+                      {suggestion}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* 10. Priority Action Plan */}
+          <section className="mb-12">
+            <SectionHeading label="Priority Action Plan" />
+
+            {sortedPriorityActions.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic">No priority actions defined.</p>
+            ) : (
+              <div className="space-y-0 divide-y divide-border">
+                {sortedPriorityActions.map((plan) => (
+                  <div key={`${plan.rank}-${plan.action}`} className="flex items-center gap-6 py-6">
+                    <div className="flex-shrink-0">
+                      <p className="font-mono text-4xl font-light text-muted-foreground/30">{plan.rank}</p>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-foreground">{plan.action}</p>
+                      {plan.rupeesImpacted !== null && (
+                        <p className="mt-1 font-mono text-xs text-muted-foreground">
+                          Impact: {rupeeFormatter.format(plan.rupeesImpacted)}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <ImpactBadge impact={plan.impact} />
+                      <UrgencyBadge urgency={plan.urgency} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
       )}
     </div>
   );
@@ -580,43 +750,77 @@ function SectionHeading({ label }: { label: string }) {
   );
 }
 
-function getSectorColorVariable(sector: string): string {
-  const colorMap: Record<string, string> = {
-    "Power": "yellow-400",
-    "Financials": "blue-500",
-    "Metals": "slate-500",
-    "Infrastructure": "purple-500",
-    "Consumer": "green-500",
-    "Auto": "red-500",
-    "ETFs": "cyan-500",
-    "Technology": "violet-500",
-    "Other": "gray-400",
-  };
-  return colorMap[sector] || colorMap["Other"];
+function StructureBlock({ label, text }: { label: string; text: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-2">{label}</p>
+      <p className="text-sm leading-relaxed text-foreground">{text}</p>
+    </div>
+  );
 }
 
-function VerdictBadge({ verdict }: { verdict: DetailedStockAnalysis["verdict"] }) {
-  const classes: Record<DetailedStockAnalysis["verdict"], string> = {
-    EXIT: "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border-[color:var(--loss)]/30",
-    AVERAGE_DOWN: "bg-[color:var(--warning)]/15 text-[color:var(--warning)] border-[color:var(--warning)]/30",
-    BOOK_PROFIT: "bg-[color:var(--gain)]/15 text-[color:var(--gain)] border-[color:var(--gain)]/30",
-    HOLD: "bg-[color:var(--surface-raised)] text-[color:var(--text-secondary)] border-border",
+function RiskProfileBadge({ profile }: { profile: InvestorRiskProfile }) {
+  const classes: Record<InvestorRiskProfile, string> = {
+    AGGRESSIVE: "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border-[color:var(--loss)]/30",
+    MODERATE: "bg-[color:var(--warning)]/15 text-[color:var(--warning)] border-[color:var(--warning)]/30",
+    CONSERVATIVE: "bg-[color:var(--gain)]/15 text-[color:var(--gain)] border-[color:var(--gain)]/30",
   };
-
   return (
-    <Badge variant="secondary" className={cn("text-xs font-mono", classes[verdict])}>
-      {verdict}
+    <Badge variant="secondary" className={cn("text-xs font-mono", classes[profile])}>
+      {profile}
     </Badge>
   );
 }
 
-function ImpactBadge({ impact }: { impact: DetailedActionPlan["impact"] }) {
-  const classes: Record<DetailedActionPlan["impact"], string> = {
+function StockVerdictBadge({ verdict }: { verdict: StockVerdict["verdict"] }) {
+  const classes: Record<StockVerdict["verdict"], string> = {
+    EXIT: "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border-[color:var(--loss)]/30",
+    HOLD_TRIM: "bg-[color:var(--warning)]/15 text-[color:var(--warning)] border-[color:var(--warning)]/30",
+    BOOK_PROFIT_PARTIAL: "bg-[color:var(--gain)]/15 text-[color:var(--gain)] border-[color:var(--gain)]/30",
+    BOOK_PROFIT_FULL: "bg-[color:var(--gain)]/15 text-[color:var(--gain)] border-[color:var(--gain)]/30",
+    HOLD: "bg-muted text-muted-foreground border-border",
+  };
+  return (
+    <Badge variant="secondary" className={cn("text-xs font-mono whitespace-nowrap", classes[verdict])}>
+      {verdict.replace(/_/g, " ")}
+    </Badge>
+  );
+}
+
+function MFVerdictBadge({ verdict }: { verdict: MFVerdict["verdict"] }) {
+  const classes: Record<MFVerdict["verdict"], string> = {
+    EXIT: "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border-[color:var(--loss)]/30",
+    SWITCH: "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border-[color:var(--loss)]/30",
+    REDUCE_SIP: "bg-[color:var(--warning)]/15 text-[color:var(--warning)] border-[color:var(--warning)]/30",
+    INCREASE_SIP: "bg-[color:var(--gain)]/15 text-[color:var(--gain)] border-[color:var(--gain)]/30",
+    CONTINUE: "bg-muted text-muted-foreground border-border",
+  };
+  return (
+    <Badge variant="secondary" className={cn("text-xs font-mono whitespace-nowrap", classes[verdict])}>
+      {verdict.replace(/_/g, " ")}
+    </Badge>
+  );
+}
+
+function PriorityBadge({ priority }: { priority: StockVerdict["priority"] }) {
+  const classes: Record<StockVerdict["priority"], string> = {
     HIGH: "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border-[color:var(--loss)]/30",
     MEDIUM: "bg-[color:var(--warning)]/15 text-[color:var(--warning)] border-[color:var(--warning)]/30",
-    LOW: "bg-[color:var(--surface-raised)] text-[color:var(--text-secondary)] border-border",
+    LOW: "bg-muted text-muted-foreground border-border",
   };
+  return (
+    <Badge variant="secondary" className={cn("text-xs", classes[priority])}>
+      {priority}
+    </Badge>
+  );
+}
 
+function ImpactBadge({ impact }: { impact: PriorityAction["impact"] }) {
+  const classes: Record<PriorityAction["impact"], string> = {
+    HIGH: "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border-[color:var(--loss)]/30",
+    MEDIUM: "bg-[color:var(--warning)]/15 text-[color:var(--warning)] border-[color:var(--warning)]/30",
+    LOW: "bg-muted text-muted-foreground border-border",
+  };
   return (
     <Badge variant="secondary" className={cn("text-xs", classes[impact])}>
       {impact}
@@ -624,13 +828,12 @@ function ImpactBadge({ impact }: { impact: DetailedActionPlan["impact"] }) {
   );
 }
 
-function UrgencyBadge({ urgency }: { urgency: DetailedActionPlan["urgency"] }) {
-  const classes: Record<DetailedActionPlan["urgency"], string> = {
-    NOW: "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border-[color:var(--loss)]/30",
-    THIS_MONTH: "bg-[color:var(--warning)]/15 text-[color:var(--warning)] border-[color:var(--warning)]/30",
-    THIS_QUARTER: "bg-[color:var(--surface-raised)] text-[color:var(--text-secondary)] border-border",
+function UrgencyBadge({ urgency }: { urgency: PriorityAction["urgency"] }) {
+  const classes: Record<PriorityAction["urgency"], string> = {
+    URGENT: "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border-[color:var(--loss)]/30",
+    THIS_WEEK: "bg-[color:var(--warning)]/15 text-[color:var(--warning)] border-[color:var(--warning)]/30",
+    THIS_MONTH: "bg-muted text-muted-foreground border-border",
   };
-
   return (
     <Badge variant="secondary" className={cn("text-xs", classes[urgency])}>
       {urgency.replace("_", " ")}

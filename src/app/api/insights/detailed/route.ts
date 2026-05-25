@@ -4,15 +4,22 @@ import { calcAllocationPct } from "@/lib/finance/calculations";
 import { calcHealthScoreWithSectors } from "@/lib/finance/health";
 import { classifySectors } from "@/lib/finance/sectors";
 import { calcTaxSummary } from "@/lib/finance/tax";
-import { buildDetailedInsightPrompt } from "@/features/ai/promptBuilder";
+import { buildDetailedInsightPrompt } from "@/features/ai/detailedPromptBuilder";
 import { getAIProviderFromRequest, isAIProvider } from "@/lib/ai/provider";
 import {
   getEffectiveApiKey,
   NO_API_KEY_CONFIGURED_MESSAGE,
 } from "@/lib/ai/user-api-keys";
-import type { Database, Json } from "@/types/db";
+import type { Database, Json, MutualFundHoldingRow } from "@/types/db";
 import type { AIProvider } from "@/lib/ai/provider";
-import type { DetailedInsightResponse, Holding, PortfolioSnapshot } from "@/types/portfolio";
+import type {
+  AssetAllocationEntry,
+  DetailedInsightResponse,
+  Holding,
+  MutualFundHolding,
+  MutualFundTotals,
+  PortfolioSnapshot,
+} from "@/types/portfolio";
 
 export const runtime = "nodejs";
 
@@ -164,22 +171,30 @@ export async function POST(request: Request): Promise<Response> {
     const sectors = await classifySectors(holdings, anthropicApiKey);
     const healthScore = calcHealthScoreWithSectors(holdings, sectors);
     const taxSummary = calcTaxSummary(holdings);
-    const prompt = buildDetailedInsightPrompt(
-      typedSnapshot,
+    const mutualFundContext = await fetchMutualFundContextForDate(
+      supabase,
+      userId,
+      snapshot.created_at,
+    );
+    const prompt = buildDetailedInsightPrompt({
+      snapshot: typedSnapshot,
       holdings,
       healthScore,
       sectors,
       taxSummary,
-    );
+      mutualFunds: mutualFundContext,
+    });
 
     const insight = await generateDetailedInsight(prompt, provider, apiKey);
+    // Never trust the model's generatedAt — overwrite with server time.
+    insight.generatedAt = new Date().toISOString();
 
     const { error: insertError } = await supabase.from("ai_insights").insert({
       snapshot_id: snapshot.id,
       user_id: snapshot.user_id,
       summary: DETAILED_SUMMARY_MARKER,
       recommendations: {
-        kind: "detailed_insight_v1",
+        kind: "detailed_insight_v2",
         payload: insight,
       } as unknown as Json,
       alerts: [] as unknown as Json,
@@ -216,7 +231,7 @@ function parseDetailedInsightFromRow(row: AiInsightRow): DetailedInsightResponse
   }
 
   const rec = row.recommendations as Record<string, unknown>;
-  if (rec.kind !== "detailed_insight_v1") {
+  if (rec.kind !== "detailed_insight_v2") {
     return null;
   }
 
@@ -227,12 +242,19 @@ function parseDetailedInsightFromRow(row: AiInsightRow): DetailedInsightResponse
   const payload = rec.payload as Partial<DetailedInsightResponse>;
   if (
     typeof payload.portfolioStory !== "string" ||
-    typeof payload.healthcommentary !== "string" ||
-    typeof payload.riskProfile !== "string" ||
-    !Array.isArray(payload.stockAnalysis) ||
-    !Array.isArray(payload.actionPlan) ||
-    typeof payload.sectorCommentary !== "object" ||
-    payload.sectorCommentary === null
+    typeof payload.investorProfile !== "string" ||
+    typeof payload.investorProfileReasoning !== "string" ||
+    !Array.isArray(payload.stockVerdicts) ||
+    !Array.isArray(payload.mfVerdicts) ||
+    !Array.isArray(payload.priorityActions) ||
+    typeof payload.equityStructure !== "object" ||
+    payload.equityStructure === null ||
+    typeof payload.mfStructure !== "object" ||
+    payload.mfStructure === null ||
+    typeof payload.combinedAnalysis !== "object" ||
+    payload.combinedAnalysis === null ||
+    typeof payload.taxOptimisation !== "object" ||
+    payload.taxOptimisation === null
   ) {
     return null;
   }
@@ -288,4 +310,131 @@ function mapSnapshot(snapshot: SnapshotRow, holdings: Holding[]): PortfolioSnaps
     source: (snapshot.source ?? "manual") as PortfolioSnapshot["source"],
     holdings,
   };
+}
+
+async function fetchMutualFundContextForDate(
+  supabase: Awaited<ReturnType<typeof import("@/lib/db/supabase").createSupabaseServerClient>>,
+  userId: string,
+  equityCreatedAt: string,
+): Promise<{
+  totals: MutualFundTotals;
+  holdings: MutualFundHolding[];
+  assetAllocation: AssetAllocationEntry[];
+} | null> {
+  const snapshotDate = equityCreatedAt.split("T")[0];
+  if (snapshotDate === undefined || snapshotDate === "") {
+    return null;
+  }
+
+  const { data: mfSnapshot, error } = await supabase
+    .from("mutual_fund_snapshots")
+    .select(
+      `
+      total_invested,
+      total_current_value,
+      total_returns,
+      total_returns_pct,
+      mutual_fund_holdings (
+        scheme_name,
+        amc,
+        category,
+        sub_category,
+        folio_no,
+        units,
+        invested_value,
+        current_value,
+        returns,
+        returns_pct,
+        allocation_pct
+      )
+    `,
+    )
+    .eq("user_id", userId)
+    .eq("snapshot_date", snapshotDate)
+    .maybeSingle();
+
+  if (error !== null || mfSnapshot === null) {
+    return null;
+  }
+
+  const snapshotData = mfSnapshot as unknown as {
+    total_invested: number;
+    total_current_value: number;
+    total_returns: number;
+    total_returns_pct: number;
+    mutual_fund_holdings: MutualFundHoldingRow[];
+  };
+
+  const holdings: MutualFundHolding[] = (snapshotData.mutual_fund_holdings ?? []).map(
+    (row) => ({
+      schemeName: row.scheme_name,
+      amc: row.amc ?? "",
+      category: row.category ?? "",
+      subCategory: row.sub_category ?? "",
+      folioNo: row.folio_no ?? "",
+      units: row.units ?? 0,
+      investedValue: row.invested_value ?? 0,
+      currentValue: row.current_value ?? 0,
+      returns: row.returns ?? 0,
+      returnsPct: row.returns_pct ?? 0,
+      allocationPct: row.allocation_pct ?? 0,
+    }),
+  );
+
+  if (holdings.length === 0) {
+    return null;
+  }
+
+  const totals: MutualFundTotals = {
+    totalInvested: snapshotData.total_invested,
+    totalCurrentValue: snapshotData.total_current_value,
+    totalReturns: snapshotData.total_returns,
+    totalReturnsPct: snapshotData.total_returns_pct,
+  };
+
+  return {
+    totals,
+    holdings,
+    assetAllocation: bucketAssetAllocation(holdings, totals.totalCurrentValue),
+  };
+}
+
+function bucketAssetAllocation(
+  holdings: MutualFundHolding[],
+  totalValue: number,
+): AssetAllocationEntry[] {
+  const buckets = new Map<string, number>();
+
+  for (const holding of holdings) {
+    const type = classifyAssetType(holding);
+    buckets.set(type, (buckets.get(type) ?? 0) + holding.currentValue);
+  }
+
+  return Array.from(buckets.entries()).map(([type, value]) => ({
+    type,
+    allocationPct:
+      totalValue > 0 ? Math.round((value / totalValue) * 10000) / 100 : 0,
+  }));
+}
+
+function classifyAssetType(holding: MutualFundHolding): string {
+  const haystack = `${holding.category} ${holding.subCategory} ${holding.schemeName}`.toLowerCase();
+
+  if (/(gold|silver)/.test(haystack)) {
+    return "Gold";
+  }
+  if (/(debt|liquid|money market|gilt|bond|overnight|corporate)/.test(haystack)) {
+    return "Debt";
+  }
+  if (/hybrid|balanced|aggressive|conservative|multi[- ]?asset/.test(haystack)) {
+    return "Hybrid";
+  }
+  if (
+    /(equity|elss|large|mid|small|flexi|multi[- ]?cap|index|nifty|sensex|international|focus|value|contra|dividend|thematic|sector)/.test(
+      haystack,
+    )
+  ) {
+    return "Equity";
+  }
+  return "Other";
 }
