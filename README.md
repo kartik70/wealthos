@@ -55,9 +55,9 @@ Generate text chunks per snapshot:
         ↓
 Embed via Gemini text-embedding-004 (768 dims)
         ↓
-Store in Supabase pgvector
+Store in Supabase pgvector (with auto-generated tsvector column for FTS)
         ↓
-At query time: embed question → cosine similarity search → retrieve top 5 chunks
+At query time: analyse query → hybrid search → RRF merge → top 5 chunks
         ↓
 Inject retrieved context + current snapshot into Claude system prompt
         ↓
@@ -65,6 +65,21 @@ Answer grounded in actual portfolio history
 ```
 
 Chunking strategy: **record-based semantic chunking** — each chunk represents one complete business event (a snapshot state, a portfolio diff, an AI commentary, a goal status) rather than arbitrary token windows. This preserves the relationship between dates, symbols, and values.
+
+### Hybrid Retrieval
+Two search strategies run in parallel at query time:
+- Semantic search: cosine similarity via pgvector (finds conceptually related chunks)
+- Keyword search: Postgres full-text search via tsvector (finds exact matches for symbols and dates)
+
+Results merged via Reciprocal Rank Fusion for best of both worlds.
+
+### Smart Query Routing
+Before retrieval, the query is analysed to extract:
+- Mentioned stock symbols → filter chunks to relevant holdings
+- Query intent → route to optimal chunk types (diff for change questions, insight for advice questions)
+- Temporal references → filter to relevant date range
+
+No LLM call needed — pure string matching for zero added latency.
 
 ---
 

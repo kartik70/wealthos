@@ -6,6 +6,7 @@ import {
 import { requireAuth } from "@/lib/db/require-auth";
 import { createSupabaseServerClient } from "@/lib/db/supabase";
 import { retrieveRelevantContext } from "../../../../lib/ai/retrieval";
+import { analyseQuery } from "../../../../lib/ai/queryAnalyser";
 import { runResearchAgent } from "../../../../lib/ai/researchAgent";
 import {
   buildAdvisorSystemPromptFromContext,
@@ -96,12 +97,26 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   let retrievedContext: string;
+  let retrievedChunksCount: number;
+  let retrievedChunkTypes: string[];
   let currentSnapshot: PortfolioSnapshot | null;
   try {
-    [retrievedContext, currentSnapshot] = await Promise.all([
-      retrieveRelevantContext(sanitizedMessage, userId, 5),
-      fetchCurrentSnapshot(supabase, userId),
-    ]);
+    // Fetch current snapshot first so we can analyse the query against
+    // the user's actual holdings (symbols + gain/loss filters).
+    currentSnapshot = await fetchCurrentSnapshot(supabase, userId);
+    const queryAnalysis = analyseQuery(
+      sanitizedMessage,
+      currentSnapshot?.holdings ?? [],
+    );
+    const retrieval = await retrieveRelevantContext(sanitizedMessage, userId, {
+      topK: 5,
+      chunkTypes: queryAnalysis.chunkTypes,
+      dateRange: queryAnalysis.dateRange ?? undefined,
+      symbols: queryAnalysis.symbols,
+    });
+    retrievedContext = retrieval.context;
+    retrievedChunksCount = retrieval.chunksUsed;
+    retrievedChunkTypes = retrieval.chunkTypes;
   } catch (err) {
     const keyResponse = missingApiKeyResponse(err);
     if (keyResponse !== null) {
@@ -109,11 +124,6 @@ export async function POST(request: Request): Promise<Response> {
     }
     throw err;
   }
-
-  const retrievedChunksCount = retrievedContext === "No portfolio history available." ||
-    retrievedContext === "No relevant portfolio history found."
-    ? 0
-    : retrievedContext.split("---").length;
 
   // Run the LangGraph research agent: extract symbols → (optionally) fetch
   // real-time market news via Tavily → assemble final context.
@@ -152,6 +162,7 @@ export async function POST(request: Request): Promise<Response> {
             `data: ${JSON.stringify({
               type: "meta",
               retrievedChunks: retrievedChunksCount,
+              retrievedChunkTypes,
               provider,
               usedMarketNews,
               mentionedSymbols,

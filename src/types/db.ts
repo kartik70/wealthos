@@ -216,6 +216,40 @@ export interface Database {
           created_at: string;
         }>;
       };
+      match_snapshot_embeddings_filtered: {
+        Args: {
+          query_embedding: number[];
+          match_user_id: string;
+          match_count?: number;
+          chunk_types?: string[] | null;
+          date_from?: string | null;
+          date_to?: string | null;
+        };
+        Returns: Array<{
+          id: string;
+          content: string;
+          chunk_type: string;
+          created_at: string;
+          semantic_score: number;
+        }>;
+      };
+      keyword_search_snapshot_embeddings: {
+        Args: {
+          query_text: string;
+          match_user_id: string;
+          match_count?: number;
+          chunk_types?: string[] | null;
+          date_from?: string | null;
+          date_to?: string | null;
+        };
+        Returns: Array<{
+          id: string;
+          content: string;
+          chunk_type: string;
+          created_at: string;
+          keyword_score: number;
+        }>;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

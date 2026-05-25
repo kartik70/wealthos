@@ -263,14 +263,31 @@ create table mutual_fund_holdings (
 
 ## RAG architecture
 
-Three chunk types per snapshot stored in `snapshot_embeddings`:
+### Retrieval Strategy: Hybrid Search
+Two queries run in parallel:
+- Vector search: cosine similarity via pgvector `<=>` operator
+- Keyword search: Postgres full-text search via `tsvector` + `plainto_tsquery`
+
+Results merged using Reciprocal Rank Fusion (RRF, k=60). Final top 5 chunks passed to Claude / Gemini.
+
+### Query Analysis (pre-retrieval)
+Before embedding the question, `analyseQuery()` (in `src/lib/ai/queryAnalyser.ts`) extracts:
+- Relevant symbols from the question + current holdings context
+- Optimal chunk types for the query intent
+- Date range if a temporal reference is detected
+
+All filtering is applied at the DB query level for efficiency. Pure string matching — no LLM call.
+
+### Chunking Strategy: Record-based semantic chunking
+Four chunk types stored in `snapshot_embeddings`:
 - `snapshot_summary` — full portfolio state on a date (all holdings, values, gain/loss)
 - `diff_summary` — changes between previous and current snapshot (buys, sells, profit bookings)
 - `insight_summary` — AI commentary from that date
+- `goal_summary` — goal progress / corpus gap
+
+Each chunk = one complete business event, not an arbitrary token window. The `content_tsv` column is auto-generated (GENERATED ALWAYS AS) for full-text search.
 
 Embeddings use Gemini `gemini-embedding-001`, 768 dimensions (truncated via `.slice(0, 768)`).
-
-Retrieval: cosine similarity via pgvector `<=>` operator, top 5 chunks injected into advisor system prompt.
 
 Chat history: last 10 messages passed as conversation history. Capped at 800 max_tokens response.
 

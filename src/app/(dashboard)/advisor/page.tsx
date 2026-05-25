@@ -150,6 +150,7 @@ export default function AdvisorPage() {
         let fullText = "";
         let meta = {
           retrievedChunks: 0,
+          retrievedChunkTypes: [] as string[],
           provider: "anthropic" as "anthropic" | "gemini",
           usedMarketNews: false,
         };
@@ -171,6 +172,7 @@ export default function AdvisorPage() {
                 type: string;
                 text?: string;
                 retrievedChunks?: number;
+                retrievedChunkTypes?: string[];
                 provider?: "anthropic" | "gemini";
                 usedMarketNews?: boolean;
                 error?: string;
@@ -179,6 +181,7 @@ export default function AdvisorPage() {
               if (parsed.type === "meta") {
                 meta = {
                   retrievedChunks: parsed.retrievedChunks ?? 0,
+                  retrievedChunkTypes: parsed.retrievedChunkTypes ?? [],
                   provider: parsed.provider ?? "anthropic",
                   usedMarketNews: parsed.usedMarketNews ?? false,
                 };
@@ -195,11 +198,16 @@ export default function AdvisorPage() {
           }
         }
 
-        finalizeLastAssistantMessage(meta.retrievedChunks, meta.provider, meta.usedMarketNews);
+        finalizeLastAssistantMessage(
+          meta.retrievedChunks,
+          meta.provider,
+          meta.usedMarketNews,
+          meta.retrievedChunkTypes,
+        );
       } catch (err) {
         const errorText = err instanceof Error ? err.message : "Failed to send message";
         updateLastAssistantMessage(errorText);
-        finalizeLastAssistantMessage(0, "anthropic", false);
+        finalizeLastAssistantMessage(0, "anthropic", false, []);
       } finally {
         setIsLoading(false);
       }
@@ -429,15 +437,14 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         {!message.isStreaming && (message.retrievedChunks !== undefined || message.provider !== undefined) && (
           <div className="mt-2 flex items-center gap-2">
             {message.retrievedChunks !== undefined && message.retrievedChunks > 0 && (
-              <span
-                className="rounded px-2 py-0.5 font-mono text-[10px]"
-                style={{
-                  background: "#111827",
-                  border: "1px solid #1e2d40",
-                  color: "#4a5568",
-                }}
-              >
-                {message.retrievedChunks} snapshot{message.retrievedChunks !== 1 ? "s" : ""}
+              <span className="text-[#3b82f6] text-xs">
+                ✦ Based on {message.retrievedChunks} chunk
+                {message.retrievedChunks !== 1 ? "s" : ""}
+                {message.retrievedChunkTypes !== undefined &&
+                  message.retrievedChunkTypes.length > 0 &&
+                  ` (${message.retrievedChunkTypes
+                    .map((t) => t.replace(/_summary$/, ""))
+                    .join(" · ")})`}
               </span>
             )}
             {message.provider !== undefined && (
