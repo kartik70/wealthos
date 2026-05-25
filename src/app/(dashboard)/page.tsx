@@ -139,7 +139,7 @@ export default function DashboardPage() {
       return "text-foreground";
     }
 
-    return equityTotals.totalGain >= 0 ? "text-emerald-700" : "text-red-700";
+    return equityTotals.totalGain >= 0 ? "text-[color:var(--gain)]" : "text-[color:var(--loss)]";
   }, [equityTotals]);
 
   const mfGainTone = useMemo(() => {
@@ -147,7 +147,7 @@ export default function DashboardPage() {
       return "text-foreground";
     }
 
-    return mfTotals.totalReturns >= 0 ? "text-emerald-700" : "text-red-700";
+    return mfTotals.totalReturns >= 0 ? "text-[color:var(--gain)]" : "text-[color:var(--loss)]";
   }, [mfTotals]);
 
   const totalReturnsTone = useMemo(() => {
@@ -155,7 +155,7 @@ export default function DashboardPage() {
       return "text-foreground";
     }
 
-    return combinedPortfolio.totalReturns >= 0 ? "text-emerald-700" : "text-red-700";
+    return combinedPortfolio.totalReturns >= 0 ? "text-[color:var(--gain)]" : "text-[color:var(--loss)]";
   }, [combinedPortfolio]);
 
   async function handleGenerateInsights() {
@@ -412,21 +412,48 @@ function StatCard({
   valueClassName?: string;
   isLoading?: boolean;
 }) {
+  // Subtle top accent: emerald if positive value text, rose if negative, otherwise transparent.
+  const accentTop =
+    valueClassName === undefined
+      ? "transparent"
+      : valueClassName.includes("--gain")
+        ? "var(--gain)"
+        : valueClassName.includes("--loss")
+          ? "var(--loss)"
+          : "transparent";
+
   return (
-    <Card size="sm">
-      <CardHeader className="pb-0">
-        <CardTitle className="text-xs text-muted-foreground">{label}</CardTitle>
-      </CardHeader>
-      <CardContent className="pt-1">
-        {isLoading ? (
-          <div className="h-7 w-2/3 animate-pulse rounded bg-muted" />
-        ) : (
-          <div className={cn("text-lg font-semibold tracking-tight", valueClassName)}>
-            {value}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <div
+      className="flex flex-col gap-2 rounded-xl px-4 py-3.5"
+      style={{
+        background: "var(--surface-raised)",
+        border: "1px solid var(--border)",
+        borderTop: `2px solid ${accentTop === "transparent" ? "var(--border)" : accentTop}`,
+      }}
+    >
+      <span
+        className="text-[10px] font-medium uppercase tracking-[0.18em]"
+        style={{ color: "var(--text-tertiary)", fontFamily: "var(--font-display)" }}
+      >
+        {label}
+      </span>
+      {isLoading ? (
+        <div
+          className="h-7 w-2/3 animate-pulse rounded"
+          style={{ background: "var(--surface)" }}
+        />
+      ) : (
+        <div
+          className={cn(
+            "font-mono text-2xl",
+            valueClassName ?? "text-[color:var(--text-primary)]",
+          )}
+          style={{ fontWeight: 500 }}
+        >
+          {value}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -201,10 +201,10 @@ export default function InsightsPage() {
 
   const healthTone =
     healthScore.score >= 70
-      ? "text-emerald-700"
+      ? "text-[color:var(--gain)]"
       : healthScore.score >= 40
         ? "text-amber-700"
-        : "text-red-700";
+        : "text-[color:var(--loss)]";
 
   const strokeColor =
     healthScore.score >= 70
@@ -545,8 +545,8 @@ export default function InsightsPage() {
                 {taxSummary.harvestingOpportunities.map((opportunity, idx) => (
                   <TableRow key={opportunity.symbol} className={cn(idx % 2 === 0 ? "bg-muted/20" : "")}>
                     <TableCell className="font-mono font-medium">{opportunity.symbol}</TableCell>
-                    <TableCell className="text-right text-red-700">{rupeeFormatter.format(opportunity.loss)}</TableCell>
-                    <TableCell className="text-right text-emerald-700">
+                    <TableCell className="text-right text-[color:var(--loss)]">{rupeeFormatter.format(opportunity.loss)}</TableCell>
+                    <TableCell className="text-right text-[color:var(--gain)]">
                       {rupeeFormatter.format(opportunity.saving)}
                     </TableCell>
                   </TableRow>
@@ -597,10 +597,10 @@ function getSectorColorVariable(sector: string): string {
 
 function VerdictBadge({ verdict }: { verdict: DetailedStockAnalysis["verdict"] }) {
   const classes: Record<DetailedStockAnalysis["verdict"], string> = {
-    EXIT: "bg-red-100 text-red-700",
-    AVERAGE_DOWN: "bg-amber-100 text-amber-700",
-    BOOK_PROFIT: "bg-emerald-100 text-emerald-700",
-    HOLD: "bg-muted text-muted-foreground",
+    EXIT: "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border-[color:var(--loss)]/30",
+    AVERAGE_DOWN: "bg-[color:var(--warning)]/15 text-[color:var(--warning)] border-[color:var(--warning)]/30",
+    BOOK_PROFIT: "bg-[color:var(--gain)]/15 text-[color:var(--gain)] border-[color:var(--gain)]/30",
+    HOLD: "bg-[color:var(--surface-raised)] text-[color:var(--text-secondary)] border-border",
   };
 
   return (
@@ -612,9 +612,9 @@ function VerdictBadge({ verdict }: { verdict: DetailedStockAnalysis["verdict"] }
 
 function ImpactBadge({ impact }: { impact: DetailedActionPlan["impact"] }) {
   const classes: Record<DetailedActionPlan["impact"], string> = {
-    HIGH: "bg-red-100 text-red-700",
-    MEDIUM: "bg-amber-100 text-amber-700",
-    LOW: "bg-muted text-muted-foreground",
+    HIGH: "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border-[color:var(--loss)]/30",
+    MEDIUM: "bg-[color:var(--warning)]/15 text-[color:var(--warning)] border-[color:var(--warning)]/30",
+    LOW: "bg-[color:var(--surface-raised)] text-[color:var(--text-secondary)] border-border",
   };
 
   return (
@@ -626,9 +626,9 @@ function ImpactBadge({ impact }: { impact: DetailedActionPlan["impact"] }) {
 
 function UrgencyBadge({ urgency }: { urgency: DetailedActionPlan["urgency"] }) {
   const classes: Record<DetailedActionPlan["urgency"], string> = {
-    NOW: "bg-red-100 text-red-700",
-    THIS_MONTH: "bg-amber-100 text-amber-700",
-    THIS_QUARTER: "bg-muted text-muted-foreground",
+    NOW: "bg-[color:var(--loss)]/15 text-[color:var(--loss)] border-[color:var(--loss)]/30",
+    THIS_MONTH: "bg-[color:var(--warning)]/15 text-[color:var(--warning)] border-[color:var(--warning)]/30",
+    THIS_QUARTER: "bg-[color:var(--surface-raised)] text-[color:var(--text-secondary)] border-border",
   };
 
   return (

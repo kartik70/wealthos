@@ -28,7 +28,7 @@ export default function DashboardLayout({
   }, []);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-muted/30">
+    <div className="flex h-screen overflow-hidden bg-background">
       <aside className="hidden h-screen shrink-0 lg:block">
         <Sidebar onImportPortfolio={() => setIsImportModalOpen(true)} />
       </aside>
@@ -50,7 +50,7 @@ export default function DashboardLayout({
         />
         <div
           className={cn(
-            "relative h-full w-64 border-r bg-sidebar transition-transform",
+            "relative h-full w-64 border-r border-border bg-background transition-transform",
             isSidebarOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >

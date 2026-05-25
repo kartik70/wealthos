@@ -169,7 +169,7 @@ export function MutualFundHoldingsTable({
                 <TableCell
                   className={cn(
                     "text-right font-mono text-sm",
-                    holding.returns >= 0 ? "text-emerald-700" : "text-red-700",
+                    holding.returns >= 0 ? "text-[color:var(--gain)]" : "text-[color:var(--loss)]",
                   )}
                 >
                   {rupeeFormatter.format(holding.returns)} (

@@ -252,7 +252,7 @@ export default function TimelinePage() {
           const previous = index < snapshots.length - 1 ? snapshots[index + 1] : null;
           const isExpanded = expandedSnapshotId === snapshot.id;
           const valueDelta = previous ? snapshot.totalValue - previous.totalValue : null;
-          const gainTone = snapshot.totalGain >= 0 ? "text-emerald-700" : "text-red-700";
+          const gainTone = snapshot.totalGain >= 0 ? "text-[color:var(--gain)]" : "text-[color:var(--loss)]";
           const pills = getSnapshotPills(snapshot, previous);
 
           return (

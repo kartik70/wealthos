@@ -110,8 +110,15 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
     const data = payload[0].payload;
     const value = payload[0].value;
     return (
-      <div className="rounded bg-white p-2 shadow-md">
-        <p className="text-sm font-semibold">
+      <div
+        className="rounded-md p-2 text-xs"
+        style={{
+          background: "var(--surface-raised)",
+          border: "1px solid var(--border)",
+          color: "var(--text-primary)",
+        }}
+      >
+        <p className="font-mono font-medium">
           {data.symbol}: {Number.isFinite(value) ? value.toFixed(2) : 0}%
         </p>
       </div>

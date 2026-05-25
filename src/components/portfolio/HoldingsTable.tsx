@@ -154,39 +154,39 @@ export function HoldingsTable({
               : filteredAndSortedHoldings.map((holding) => (
                   <TableRow key={holding.symbol}>
                     <TableCell className="font-medium">{holding.symbol}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right font-mono">
                       {numberFormatter.format(holding.quantity)}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right font-mono">
                       {rupeeFormatter.format(holding.avgCost)}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right font-mono">
                       {rupeeFormatter.format(holding.currentPrice)}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right font-mono">
                       {rupeeFormatter.format(holding.currentValue)}
                     </TableCell>
                     <TableCell
                       className={cn(
-                        "text-right font-medium",
+                        "text-right font-mono font-medium",
                         holding.unrealisedGain >= 0
-                          ? "text-emerald-700"
-                          : "text-red-700",
+                          ? "text-[color:var(--gain)]"
+                          : "text-[color:var(--loss)]",
                       )}
                     >
                       {rupeeFormatter.format(holding.unrealisedGain)}
                     </TableCell>
                     <TableCell
                       className={cn(
-                        "text-right font-medium",
+                        "text-right font-mono font-medium",
                         holding.unrealisedGain >= 0
-                          ? "text-emerald-700"
-                          : "text-red-700",
+                          ? "text-[color:var(--gain)]"
+                          : "text-[color:var(--loss)]",
                       )}
                     >
                       {numberFormatter.format(holding.unrealisedGainPct)}%
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right font-mono">
                       {numberFormatter.format(holding.allocationPct)}%
                     </TableCell>
                   </TableRow>
