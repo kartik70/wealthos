@@ -1,7 +1,19 @@
 import Link from "next/link";
-import { ArrowRight, Landmark, Star } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  ArrowRight,
+  Brain,
+  Camera,
+  Calculator,
+  KeyRound,
+  Landmark,
+  LineChart,
+  Star,
+  Target,
+} from "lucide-react";
 
-const GITHUB_URL = "https://github.com/kartikkakad/wealthos";
+const GITHUB_URL = "https://github.com/kartik70";
+const LINKEDIN_URL = "https://linkedin.com/in/kartik-kakad";
 
 function GithubIcon({ className }: { className?: string }) {
   return (
@@ -16,34 +28,47 @@ function GithubIcon({ className }: { className?: string }) {
   );
 }
 
-const FEATURES = [
+function LinkedinIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.852 3.37-1.852 3.601 0 4.268 2.37 4.268 5.455v6.288zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.063 2.063 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+    </svg>
+  );
+}
+
+const FEATURES: { icon: LucideIcon; title: string; body: string }[] = [
   {
-    emoji: "📸",
+    icon: Camera,
     title: "Snapshot Timeline",
     body: "Every portfolio state saved. Compare any two dates. See exactly what changed.",
   },
   {
-    emoji: "🤖",
+    icon: Brain,
     title: "RAG-Powered Advisor",
     body: "Chat with your entire portfolio history. Claude retrieves relevant snapshots to answer precisely.",
   },
   {
-    emoji: "🧮",
+    icon: Calculator,
     title: "Deterministic Engine",
     body: "P&L, CAGR, tax, concentration computed in pure code. AI never touches the math.",
   },
   {
-    emoji: "🎯",
+    icon: Target,
     title: "Deep Analysis",
     body: "Health score, sector classification, tax harvesting opportunities, action plan.",
   },
   {
-    emoji: "🔐",
+    icon: KeyRound,
     title: "Your Keys, Your Data",
     body: "Bring your own Anthropic or Gemini API key. Self-host on Vercel for free.",
   },
   {
-    emoji: "📊",
+    icon: LineChart,
     title: "Equity + Mutual Funds",
     body: "Kite CSV for equity. Groww XLSX for MFs. Combined portfolio intelligence.",
   },
@@ -128,14 +153,14 @@ function Nav() {
 function Hero() {
   return (
     <section
-      className="relative flex min-h-screen flex-col items-center justify-center px-6 pt-24 text-center"
+      className="relative flex flex-col items-center justify-center px-6 pb-20 pt-32 text-center sm:pb-24 sm:pt-36"
       style={{
         background:
           "radial-gradient(ellipse at 50% 0%, rgba(59,130,246,0.08) 0%, transparent 60%), #0a0f1e",
       }}
     >
       <div
-        className="fade-in-up mx-auto flex max-w-3xl flex-col items-center gap-8"
+        className="fade-in-up mx-auto flex max-w-3xl flex-col items-center gap-6"
         style={{ animationDelay: "0.05s" }}
       >
         <span
@@ -163,16 +188,15 @@ function Hero() {
         </h1>
 
         <p
-          className="mx-auto max-w-2xl text-xl leading-relaxed"
+          className="mx-auto max-w-xl text-base leading-relaxed sm:text-[17px]"
           style={{ color: "#8899aa" }}
         >
-          WealthOS is an AI-powered portfolio intelligence platform for Indian
-          investors. Upload your Kite and Groww exports, get deep analysis,
-          track decisions over time, and chat with your entire investment
-          history.
+          AI-powered portfolio intelligence for Indian investors. Upload your
+          Kite and Groww exports, get deep analysis, and chat with your entire
+          investment history.
         </p>
 
-        <div className="mt-2 flex flex-col items-center gap-3 sm:flex-row sm:gap-3">
+        <div className="mt-1 flex flex-col items-center gap-3 sm:flex-row sm:gap-3">
           <a
             href={GITHUB_URL}
             target="_blank"
@@ -193,7 +217,7 @@ function Hero() {
           </Link>
         </div>
 
-        <p className="text-sm" style={{ color: "#4a5568" }}>
+        <p className="text-xs" style={{ color: "#4a5568" }}>
           Free to self-host · Bring your own Claude or Gemini key
         </p>
       </div>
@@ -230,28 +254,36 @@ function Features() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {FEATURES.map((feature, idx) => (
-            <div
-              key={feature.title}
-              className="fade-in-up rounded-xl p-6 transition-colors"
-              style={{
-                background: "#111827",
-                border: "1px solid #1e2d40",
-                animationDelay: `${0.15 + idx * 0.05}s`,
-              }}
-            >
-              <div className="mb-3 text-2xl">{feature.emoji}</div>
-              <h3
-                className="mb-2 text-base text-white"
-                style={{ fontWeight: 500 }}
+          {FEATURES.map((feature, idx) => {
+            const Icon = feature.icon;
+            return (
+              <div
+                key={feature.title}
+                className="fade-in-up rounded-xl p-6 transition-colors"
+                style={{
+                  background: "#111827",
+                  border: "1px solid #1e2d40",
+                  animationDelay: `${0.15 + idx * 0.05}s`,
+                }}
               >
-                {feature.title}
-              </h3>
-              <p className="text-sm leading-relaxed" style={{ color: "#8899aa" }}>
-                {feature.body}
-              </p>
-            </div>
-          ))}
+                <div
+                  className="mb-4 inline-grid place-items-center rounded-lg p-2"
+                  style={{ background: "#1d3a5f", color: "#3b82f6" }}
+                >
+                  <Icon className="size-5" aria-hidden="true" />
+                </div>
+                <h3
+                  className="mb-2 text-base text-white"
+                  style={{ fontWeight: 500 }}
+                >
+                  {feature.title}
+                </h3>
+                <p className="text-sm leading-relaxed" style={{ color: "#8899aa" }}>
+                  {feature.body}
+                </p>
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -282,9 +314,12 @@ function Architecture() {
 
         <div className="flex flex-col items-center gap-3">
           {ARCHITECTURE_STEPS.map((step, idx) => (
-            <div key={step} className="flex w-full flex-col items-center gap-3">
+            <div
+              key={step}
+              className="flex w-full max-w-sm flex-col items-center gap-3"
+            >
               <div
-                className="w-full max-w-md whitespace-pre-line rounded-lg px-4 py-2.5 text-center font-mono text-sm"
+                className="w-full whitespace-pre-line rounded-lg px-4 py-2.5 text-center font-mono text-sm"
                 style={{
                   background: "#111827",
                   border: "1px solid #1e2d40",
@@ -378,19 +413,40 @@ function Footer() {
             </span>
           </div>
 
-          <div className="flex flex-col items-start gap-1 sm:items-end">
-            <a
-              href={GITHUB_URL}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="inline-flex items-center gap-1.5 text-sm transition-colors"
-              style={{ color: "#8899aa" }}
-            >
-              <GithubIcon className="size-4" />
-              GitHub
-            </a>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <div className="flex items-center gap-3">
+              <a
+                href={GITHUB_URL}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-1.5 text-sm transition-colors hover:text-white"
+                style={{ color: "#8899aa" }}
+              >
+                <GithubIcon className="size-4" />
+                GitHub
+              </a>
+              <a
+                href={LINKEDIN_URL}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-1.5 text-sm transition-colors hover:text-white"
+                style={{ color: "#8899aa" }}
+              >
+                <LinkedinIcon className="size-4" />
+                LinkedIn
+              </a>
+            </div>
             <span className="text-sm" style={{ color: "#8899aa" }}>
-              Built by Kartik Kakad
+              Built by{" "}
+              <a
+                href={LINKEDIN_URL}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="transition-colors hover:text-white"
+                style={{ color: "#3b82f6" }}
+              >
+                Kartik Kakad
+              </a>
             </span>
           </div>
         </div>

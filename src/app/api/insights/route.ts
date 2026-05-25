@@ -107,6 +107,8 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const insight = await generateInsight(prompt, provider, apiKey);
+    // Never trust the model's generatedAt — overwrite with server time.
+    insight.generatedAt = new Date().toISOString();
     const { error: insertError } = await supabase.from("ai_insights").insert({
       snapshot_id: snapshot.id,
       user_id: userId,
