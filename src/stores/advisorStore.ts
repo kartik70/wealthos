@@ -6,6 +6,7 @@ export interface ChatMessage {
   content: string;
   retrievedChunks?: number;
   provider?: "anthropic" | "gemini";
+  usedMarketNews?: boolean;
   isStreaming?: boolean;
 }
 
@@ -14,7 +15,11 @@ interface AdvisorStore {
   setMessages: (messages: ChatMessage[]) => void;
   addMessage: (message: ChatMessage) => void;
   updateLastAssistantMessage: (text: string) => void;
-  finalizeLastAssistantMessage: (retrievedChunks: number, provider: "anthropic" | "gemini") => void;
+  finalizeLastAssistantMessage: (
+    retrievedChunks: number,
+    provider: "anthropic" | "gemini",
+    usedMarketNews?: boolean,
+  ) => void;
   clearMessages: () => void;
 }
 
@@ -36,7 +41,7 @@ export const useAdvisorStore = create<AdvisorStore>((set) => ({
       return { messages };
     }),
 
-  finalizeLastAssistantMessage: (retrievedChunks, provider) =>
+  finalizeLastAssistantMessage: (retrievedChunks, provider, usedMarketNews) =>
     set((state) => {
       const messages = [...state.messages];
       const lastIdx = messages.length - 1;
@@ -46,6 +51,7 @@ export const useAdvisorStore = create<AdvisorStore>((set) => ({
           isStreaming: false,
           retrievedChunks,
           provider,
+          usedMarketNews: usedMarketNews ?? false,
         };
       }
       return { messages };

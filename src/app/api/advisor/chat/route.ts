@@ -6,7 +6,11 @@ import {
 import { requireAuth } from "@/lib/db/require-auth";
 import { createSupabaseServerClient } from "@/lib/db/supabase";
 import { retrieveRelevantContext } from "../../../../lib/ai/retrieval";
-import { buildAdvisorSystemPrompt } from "../../../../features/ai/advisorPromptBuilder";
+import { runResearchAgent } from "../../../../lib/ai/researchAgent";
+import {
+  buildAdvisorSystemPromptFromContext,
+  buildCurrentSnapshotText,
+} from "../../../../features/ai/advisorPromptBuilder";
 import type { PortfolioSnapshot } from "../../../../types/portfolio";
 import type { HoldingRow, PortfolioSnapshotRow } from "../../../../types/db";
 import { getAIProviderFromRequest } from "../../../../lib/ai/provider";
@@ -106,12 +110,36 @@ export async function POST(request: Request): Promise<Response> {
     throw err;
   }
 
-  const systemPrompt = buildGuardrailedSystemPrompt(retrievedContext, currentSnapshot);
-
   const retrievedChunksCount = retrievedContext === "No portfolio history available." ||
     retrievedContext === "No relevant portfolio history found."
     ? 0
     : retrievedContext.split("---").length;
+
+  // Run the LangGraph research agent: extract symbols → (optionally) fetch
+  // real-time market news via Tavily → assemble final context.
+  let finalContext: string;
+  let usedMarketNews = false;
+  let mentionedSymbols: string[] = [];
+  try {
+    const agentResult = await runResearchAgent({
+      question: sanitizedMessage,
+      userId,
+      ragContext: retrievedContext,
+      currentSnapshotText: buildCurrentSnapshotText(currentSnapshot),
+      snapshot: currentSnapshot,
+    });
+    finalContext = agentResult.finalContext;
+    usedMarketNews = agentResult.usedMarketNews;
+    mentionedSymbols = agentResult.mentionedSymbols;
+  } catch (err) {
+    // Tavily failure (e.g., missing key or upstream timeout) should not break
+    // the chat — fall back to plain RAG + snapshot context.
+    console.error("[advisor/chat] research agent failed:", err);
+    const snapshotText = buildCurrentSnapshotText(currentSnapshot);
+    finalContext = `PORTFOLIO HISTORY (from your data):\n${retrievedContext}\n\nCURRENT PORTFOLIO:\n${snapshotText === "" ? "(no snapshot uploaded yet)" : snapshotText}`;
+  }
+
+  const systemPrompt = buildGuardrailedSystemPrompt(finalContext);
 
   const encoder = new TextEncoder();
 
@@ -121,7 +149,13 @@ export async function POST(request: Request): Promise<Response> {
         // Send metadata first
         controller.enqueue(
           encoder.encode(
-            `data: ${JSON.stringify({ type: "meta", retrievedChunks: retrievedChunksCount, provider })}\n\n`,
+            `data: ${JSON.stringify({
+              type: "meta",
+              retrievedChunks: retrievedChunksCount,
+              provider,
+              usedMarketNews,
+              mentionedSymbols,
+            })}\n\n`,
           ),
         );
 
@@ -167,11 +201,8 @@ export async function POST(request: Request): Promise<Response> {
   });
 }
 
-function buildGuardrailedSystemPrompt(
-  retrievedContext: string,
-  currentSnapshot: PortfolioSnapshot | null,
-): string {
-  const basePrompt = buildAdvisorSystemPrompt(retrievedContext, currentSnapshot);
+function buildGuardrailedSystemPrompt(finalContext: string): string {
+  const basePrompt = buildAdvisorSystemPromptFromContext(finalContext);
   return `${basePrompt}\n\n${ADVISOR_SYSTEM_PROMPT}`;
 }
 

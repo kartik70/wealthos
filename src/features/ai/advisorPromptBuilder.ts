@@ -8,7 +8,8 @@ export function buildAdvisorSystemPrompt(
     currentSnapshot !== null ? buildCurrentSnapshotSection(currentSnapshot) : "";
 
   return `You are WealthOS, a personal portfolio intelligence advisor.
-You have access to the user's complete portfolio history through retrieved context.
+You have access to both the user's portfolio history (retrieved from their own data) AND real-time market news for relevant holdings (fetched live via a research agent when applicable).
+Always cite whether your answer is based on portfolio data ("from your snapshots") or current market news ("per recent news"). Never blur the two.
 Always cite specific dates and numbers from the context.
 Never make up data not present in the context.
 Be concise, specific, and actionable.
@@ -17,6 +18,34 @@ Retrieved portfolio history (most relevant to the question):
 ${retrievedContext}
 ${currentSnapshotSection}
 Answer the user's question using both the retrieved history and current snapshot.`;
+}
+
+/**
+ * Variant used by the Research Agent pipeline: the caller has already
+ * assembled the merged context (RAG + current snapshot + market news)
+ * into a single block via `runResearchAgent`, so the system prompt just
+ * injects that block verbatim.
+ */
+export function buildAdvisorSystemPromptFromContext(finalContext: string): string {
+  return `You are WealthOS, a personal portfolio intelligence advisor.
+You have access to both the user's portfolio history AND real-time market news for relevant holdings.
+Always cite whether your answer is based on portfolio data ("from your snapshots") or current market news ("per recent news"). Never blur the two.
+Always cite specific dates and numbers from the context.
+Never make up data not present in the context.
+Be concise, specific, and actionable.
+
+${finalContext}
+
+Answer the user's question grounded in the context above.`;
+}
+
+/**
+ * Plain-text snapshot summary used by the Research Agent as the
+ * "CURRENT PORTFOLIO" section of the merged context.
+ */
+export function buildCurrentSnapshotText(snapshot: PortfolioSnapshot | null): string {
+  if (snapshot === null) return "";
+  return buildCurrentSnapshotSection(snapshot).trim();
 }
 
 function buildCurrentSnapshotSection(snapshot: PortfolioSnapshot): string {

@@ -36,6 +36,7 @@ WealthOS is a personal AI-powered portfolio intelligence platform. It helps the 
 | AI Chat | Anthropic SDK | claude-sonnet-4-20250514 |
 | AI Alt | Google Generative AI SDK | gemini-2.0-flash, user-selectable |
 | Embeddings | Google Generative AI SDK | gemini-embedding-001, always used regardless of chat provider |
+| Research Agent | LangGraph + Tavily | Multi-node async workflow for market context |
 | Markdown | react-markdown | Advisor chat responses only |
 | XLSX parsing | SheetJS (xlsx) | Groww XLSX parser |
 | CSV parsing | papaparse | Kite CSV parser |
@@ -275,6 +276,32 @@ Chat history: last 10 messages passed as conversation history. Capped at 800 max
 
 ---
 
+## Research Agent Architecture
+
+The Advisor chat does NOT go straight from RAG → LLM. Instead, every user question is run through a LangGraph workflow (`src/lib/ai/researchAgent.ts`) that conditionally augments the context with real-time market news:
+
+```
+User question
+      ↓
+Node 1: Extract mentioned/relevant symbols from question + holdings
+      ↓ (conditional — skip if generic question or no symbols found)
+Node 2: Fetch real-time market news via Tavily (max 3 symbols)
+      ↓
+Node 3: Build final context = RAG history + current snapshot + market news
+      ↓
+Claude / Gemini generates grounded answer
+```
+
+Rules:
+- Symbol extraction is pure string matching against the user's current holdings (no LLM call).
+- Exit/hold intent ("should I exit", "sell", "trim") with no explicit symbol expands to the top loss positions.
+- Tavily is capped at 3 symbols per request and uses the `news` topic with `searchDepth: "basic"`.
+- If `TAVILY_API_KEY` is missing or Tavily fails, the agent falls back to plain RAG + snapshot context — chat never breaks.
+- The system prompt instructs the LLM to cite whether each claim is grounded in portfolio data or current market news.
+- A `✦ Includes live market data` badge appears on assistant messages whose context included Tavily results.
+
+---
+
 ## Upload flow
 
 **Kite (equity):** CSV file + report date → `parseKiteCSV` → `calcAllocationPct` + `calcPortfolioTotals` → insert `portfolio_snapshots` + `holdings` → `embedSnapshot`
@@ -295,6 +322,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 ANTHROPIC_API_KEY=
 GEMINI_API_KEY=
+TAVILY_API_KEY=
 RESEND_API_KEY=
 ALERT_EMAIL=
 CRON_SECRET=
@@ -379,7 +407,7 @@ Other: anything not matched
 - Do not call Gemini embedding SDK outside `src/lib/ai/embeddings.ts`
 - Do not call Supabase outside `src/lib/db/supabase.ts`
 - Do not put financial calculations inside AI prompts
-- Do not add LangChain, LangGraph, CrewAI, LiteLLM, or FastAPI
+- LangGraph is allowed ONLY inside `src/lib/ai/researchAgent.ts` for the Portfolio Research Agent. Do not introduce LangChain, CrewAI, LiteLLM, or FastAPI elsewhere.
 - Do not use `any` in TypeScript
 - Do not add Redis or BullMQ until async queues are actually needed
 - Do not build multi-user BYOK until personal use is fully validated

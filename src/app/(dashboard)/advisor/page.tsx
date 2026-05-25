@@ -148,7 +148,11 @@ export default function AdvisorPage() {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let fullText = "";
-        let meta = { retrievedChunks: 0, provider: "anthropic" as "anthropic" | "gemini" };
+        let meta = {
+          retrievedChunks: 0,
+          provider: "anthropic" as "anthropic" | "gemini",
+          usedMarketNews: false,
+        };
 
         while (true) {
           const { done, value } = await reader.read();
@@ -168,6 +172,7 @@ export default function AdvisorPage() {
                 text?: string;
                 retrievedChunks?: number;
                 provider?: "anthropic" | "gemini";
+                usedMarketNews?: boolean;
                 error?: string;
               };
 
@@ -175,6 +180,7 @@ export default function AdvisorPage() {
                 meta = {
                   retrievedChunks: parsed.retrievedChunks ?? 0,
                   provider: parsed.provider ?? "anthropic",
+                  usedMarketNews: parsed.usedMarketNews ?? false,
                 };
               } else if (parsed.type === "delta" && parsed.text) {
                 fullText += parsed.text;
@@ -189,11 +195,11 @@ export default function AdvisorPage() {
           }
         }
 
-        finalizeLastAssistantMessage(meta.retrievedChunks, meta.provider);
+        finalizeLastAssistantMessage(meta.retrievedChunks, meta.provider, meta.usedMarketNews);
       } catch (err) {
         const errorText = err instanceof Error ? err.message : "Failed to send message";
         updateLastAssistantMessage(errorText);
-        finalizeLastAssistantMessage(0, "anthropic");
+        finalizeLastAssistantMessage(0, "anthropic", false);
       } finally {
         setIsLoading(false);
       }
@@ -444,6 +450,11 @@ function MessageBubble({ message }: { message: ChatMessage }) {
                 }}
               >
                 {message.provider === "anthropic" ? "Claude" : "Gemini"}
+              </span>
+            )}
+            {message.usedMarketNews === true && (
+              <span className="text-[#3b82f6] text-xs">
+                ✦ Includes live market data
               </span>
             )}
           </div>

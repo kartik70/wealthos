@@ -15,7 +15,7 @@ Most broker dashboards show you numbers. WealthOS tells you what those numbers m
 - **Snapshot Timeline** — every portfolio state saved with a date. Compare any two snapshots. See exactly what changed, what was bought, sold, or profit-booked.
 - **AI Insights** — stock-by-stock verdicts (BOOK PROFIT / HOLD / EXIT), MF fund quality check, LTCG timing alerts, tax harvesting opportunities, and a ranked priority action plan.
 - **Deep Analysis** — health score, sector classification, investor risk profile detection, fund overlap analysis, combined equity + MF view.
-- **RAG-Powered Advisor** — conversational AI that retrieves relevant snapshots from your history to answer questions precisely. Ask "when did I buy CIPLA?" or "am I on track for retirement?" and get answers grounded in your actual data.
+- **RAG-Powered Advisor with Live Market Context** — conversational AI that retrieves relevant snapshots AND fetches real-time market news for mentioned holdings via a LangGraph research agent. Ask "should I hold JIOFIN?" and get an answer grounded in both your portfolio history and current market developments.
 - **Goals Tracking** — set a target corpus, track progress against combined equity + MF value, see projected value at target date.
 - **Bring Your Own Key** — self-host for free on Vercel. Add your own Anthropic or Gemini API key in settings.
 
@@ -82,6 +82,7 @@ Chunking strategy: **record-based semantic chunking** — each chunk represents 
 | AI Chat | Anthropic Claude (claude-sonnet-4-20250514) |
 | AI Alternative | Google Gemini (gemini-2.0-flash) |
 | Embeddings | Google Gemini (gemini-embedding-001, 768 dims) |
+| Research Agent | LangGraph + Tavily Search | Multi-node async research workflow |
 | CSV Parsing | papaparse |
 | XLSX Parsing | SheetJS |
 | Email Alerts | Resend |
@@ -120,6 +121,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_publishable_key
 SUPABASE_SERVICE_ROLE_KEY=your_secret_key
 ANTHROPIC_API_KEY=sk-ant-...          # optional if using Gemini
 GEMINI_API_KEY=AIza...                # optional if using Claude
+TAVILY_API_KEY=tvly-...               # optional, enables live market context in advisor chat
 RESEND_API_KEY=re_...                 # optional, for email alerts
 ALERT_EMAIL=your@email.com
 CRON_SECRET=any-random-string
@@ -205,6 +207,8 @@ src/
 ## Key design decisions
 
 **Why no LangChain/LangGraph?** Premature orchestration complexity. The intelligence here is deterministic calculation + single LLM call. LangGraph becomes relevant when scheduling autonomous workflows — deferred until needed.
+
+**Why LangGraph now?** The Portfolio Research Agent is a genuine multi-step orchestration problem — extract symbols, conditionally fetch news, synthesise context. This is exactly the use case LangGraph was designed for. Earlier features (insights, chat) were single LLM calls and didn't need it.
 
 **Why Next.js API routes instead of FastAPI?** Single repo, faster iteration. FastAPI migration path is clean when Python-native ML is needed.
 
