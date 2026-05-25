@@ -131,3 +131,61 @@ function daysAgo(from: Date, days: number): Date {
   d.setDate(d.getDate() - days);
   return d;
 }
+
+// ---------------------------------------------------------------------------
+// Forward-looking vs historical classification (used by the research agent
+// to decide whether real-time market news is worth fetching).
+// ---------------------------------------------------------------------------
+
+const FORWARD_LOOKING_PHRASES = [
+  "should i",
+  "should i hold",
+  "should i exit",
+  "should i sell",
+  "should i buy",
+  "what is happening",
+  "what's happening",
+  "whats happening",
+  "latest news",
+  "is it worth",
+  "good time to",
+  "buy more",
+  "outlook",
+  "future",
+  "target price",
+];
+
+const HISTORICAL_PHRASES = [
+  "when did i buy",
+  "when did i sell",
+  "when did i add",
+  "what did i buy",
+  "what changed",
+  "what was my portfolio",
+  "how much did i pay",
+  "what was the price",
+];
+
+const HISTORICAL_PREFIXES = ["when ", "what was ", "how many "];
+
+export function isForwardLookingQuestion(question: string): boolean {
+  const lower = question.toLowerCase().trim();
+  if (lower === "") return false;
+
+  // Explicit forward-looking phrasing wins outright.
+  if (FORWARD_LOOKING_PHRASES.some((p) => lower.includes(p))) {
+    return true;
+  }
+
+  // Explicit historical/factual phrasing or prefix → not forward-looking.
+  if (HISTORICAL_PHRASES.some((p) => lower.includes(p))) {
+    return false;
+  }
+  if (HISTORICAL_PREFIXES.some((p) => lower.startsWith(p))) {
+    return false;
+  }
+
+  // Default: treat as not forward-looking — only fetch market news when we
+  // have a clear advisory / current-context signal.
+  return false;
+}

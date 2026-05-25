@@ -2,6 +2,7 @@ import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { tavily, type TavilySearchResponse } from "@tavily/core";
 
 import type { Holding, PortfolioSnapshot } from "@/types/portfolio";
+import { isForwardLookingQuestion } from "./queryAnalyser";
 
 /**
  * Portfolio Research Agent
@@ -160,6 +161,10 @@ function extractSymbolsNode(state: ResearchState): Partial<ResearchState> {
 function shouldFetchNews(state: ResearchState): "fetch" | "skip" {
   if (state.mentionedSymbols.length === 0) return "skip";
   if (isPurelyGenericQuestion(state.question)) return "skip";
+  // Only fetch real-time market news for forward-looking / advisory
+  // questions. Historical and factual questions can be answered from RAG
+  // + snapshot data alone — no Tavily call needed.
+  if (!isForwardLookingQuestion(state.question)) return "skip";
   return "fetch";
 }
 
