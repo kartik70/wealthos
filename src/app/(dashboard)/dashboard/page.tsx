@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { AllocationChart } from "@/components/dashboard/AllocationChart";
+import { MFAllocationCharts } from "@/components/dashboard/MFAllocationCharts";
 import { HoldingsTable } from "@/components/portfolio/HoldingsTable";
 import { MutualFundHoldingsTable } from "@/components/portfolio/MutualFundHoldingsTable";
 import { InsightCard } from "@/components/insights/InsightCard";
@@ -139,6 +140,11 @@ export default function DashboardPage() {
   const hasMutualFundHoldings =
     mutualFundSnapshot !== null && mutualFundSnapshot.holdings.length > 0;
   const hasAnyHoldings = hasEquityHoldings || hasMutualFundHoldings;
+  const defaultHoldingsTab = hasEquityHoldings ? "equity" : "mutual-funds";
+  const [holdingsTab, setHoldingsTab] = useState<string>(defaultHoldingsTab);
+  useEffect(() => {
+    setHoldingsTab(defaultHoldingsTab);
+  }, [defaultHoldingsTab]);
 
   const equityGainTone = useMemo(() => {
     if (equityTotals === undefined) {
@@ -362,7 +368,7 @@ export default function DashboardPage() {
             className="overflow-hidden rounded-xl"
             style={{ background: "#111827", border: "1px solid #1e2d40" }}
           >
-            <Tabs defaultValue={hasEquityHoldings ? "equity" : "mutual-funds"}>
+            <Tabs value={holdingsTab} onValueChange={setHoldingsTab}>
               <TabsList
                 variant="line"
                 className="!h-auto !w-full !justify-start !rounded-none !p-0"
@@ -398,13 +404,23 @@ export default function DashboardPage() {
             </Tabs>
           </div>
 
-          {hasEquityHoldings && equitySnapshot !== null ? (
+          {holdingsTab === "equity" && hasEquityHoldings && equitySnapshot !== null ? (
             <Card>
               <CardHeader>
                 <CardTitle>Equity allocation</CardTitle>
               </CardHeader>
               <CardContent>
                 <AllocationChart holdings={equitySnapshot.holdings} />
+              </CardContent>
+            </Card>
+          ) : null}
+          {holdingsTab === "mutual-funds" && hasMutualFundHoldings && mutualFundSnapshot !== null ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>MF allocation</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <MFAllocationCharts holdings={mutualFundSnapshot.holdings} />
               </CardContent>
             </Card>
           ) : null}

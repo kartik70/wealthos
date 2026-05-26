@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Cell,
   Pie,
@@ -10,21 +10,20 @@ import {
   Tooltip,
 } from "recharts";
 
-import type { Holding } from "@/types/portfolio";
+import type { MutualFundHolding } from "@/types/portfolio";
 
-interface AllocationChartProps {
-  holdings: Holding[];
+interface MFAllocationChartsProps {
+  holdings: MutualFundHolding[];
 }
 
-interface AllocationDatum {
-  symbol: string;
-  name: string;
+interface DonutDatum {
+  label: string;
   allocationPct: number;
 }
 
 interface CustomTooltipProps {
   active?: boolean;
-  payload?: Array<{ payload: AllocationDatum; value: number }>;
+  payload?: Array<{ payload: DonutDatum; value: number }>;
 }
 
 interface ActiveShapeProps {
@@ -35,7 +34,7 @@ interface ActiveShapeProps {
   startAngle: number;
   endAngle: number;
   fill: string;
-  payload: AllocationDatum;
+  payload: DonutDatum;
   value: number;
 }
 
@@ -52,31 +51,65 @@ const chartColors = [
   "#14b8a6",
 ];
 
-export function AllocationChart({ holdings }: AllocationChartProps) {
-  const data = buildAllocationData(holdings);
+export function MFAllocationCharts({ holdings }: MFAllocationChartsProps) {
+  const byFund = useMemo(() => buildFundData(holdings), [holdings]);
+  const byCategory = useMemo(() => buildCategoryData(holdings), [holdings]);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <DonutChart
+        data={byFund}
+        centerCount={holdings.length}
+        centerLabel="FUNDS"
+        sectionLabel="By Fund"
+      />
+      <DonutChart
+        data={byCategory}
+        centerCount={byCategory.length}
+        centerLabel="CATEGORIES"
+        sectionLabel="By Category"
+      />
+    </div>
+  );
+}
+
+interface DonutChartProps {
+  data: DonutDatum[];
+  centerCount: number;
+  centerLabel: string;
+  sectionLabel: string;
+}
+
+function DonutChart({
+  data,
+  centerCount,
+  centerLabel,
+  sectionLabel,
+}: DonutChartProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   if (data.length === 0) {
     return (
-      <div className="flex h-80 items-center justify-center text-sm text-muted-foreground">
-        No allocation data
+      <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+        No {sectionLabel.toLowerCase()} data
       </div>
     );
   }
 
-  const totalHoldings = holdings.length;
-
   return (
     <div className="w-full">
-      <div className="relative h-80 w-full">
+      <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.15em] text-[#4a5568]">
+        {sectionLabel}
+      </div>
+      <div className="relative h-64 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
               data={data}
               dataKey="allocationPct"
-              nameKey="symbol"
-              innerRadius={62}
-              outerRadius={96}
+              nameKey="label"
+              innerRadius={50}
+              outerRadius={80}
               paddingAngle={2}
               isAnimationActive={true}
               animationBegin={0}
@@ -88,7 +121,7 @@ export function AllocationChart({ holdings }: AllocationChartProps) {
             >
               {data.map((entry, index) => (
                 <Cell
-                  key={entry.symbol}
+                  key={entry.label}
                   fill={chartColors[index % chartColors.length]}
                 />
               ))}
@@ -99,25 +132,27 @@ export function AllocationChart({ holdings }: AllocationChartProps) {
         {activeIndex === null && (
           <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
             <span className="font-mono text-lg text-[var(--text-primary)]">
-              {totalHoldings} holdings
+              {centerCount}
             </span>
             <span className="mt-1 text-[10px] tracking-widest text-[#4a5568]">
-              EQUITY
+              {centerLabel}
             </span>
           </div>
         )}
       </div>
-      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
         {data.map((entry, index) => (
           <div
-            key={entry.symbol}
+            key={entry.label}
             className="flex items-center gap-1.5 font-mono text-xs text-[#8899aa]"
           >
             <span
               className="inline-block h-2 w-2 rounded-full"
               style={{ background: chartColors[index % chartColors.length] }}
             />
-            <span>{entry.symbol}</span>
+            <span className="max-w-[160px] truncate" title={entry.label}>
+              {entry.label}
+            </span>
             <span>{entry.allocationPct.toFixed(1)}%</span>
           </div>
         ))}
@@ -142,12 +177,12 @@ function renderActiveShape(props: unknown) {
     <g>
       <text
         x={cx}
-        y={cy - 8}
+        y={cy - 6}
         textAnchor="middle"
         fill="var(--text-primary)"
-        className="font-mono text-sm font-medium"
+        className="font-mono text-[11px] font-medium"
       >
-        {payload.symbol}
+        {truncateLabel(payload.label, 18)}
       </text>
       <text
         x={cx}
@@ -180,33 +215,9 @@ function renderActiveShape(props: unknown) {
   );
 }
 
-function buildAllocationData(holdings: Holding[]): AllocationDatum[] {
-  const sortedHoldings = [...holdings].sort(
-    (left, right) => right.allocationPct - left.allocationPct,
-  );
-  const topHoldings = sortedHoldings.slice(0, 8).map((holding) => ({
-    symbol: holding.symbol,
-    name: holding.name,
-    allocationPct: holding.allocationPct,
-  }));
-  const othersAllocation = sortedHoldings
-    .slice(8)
-    .reduce((total, holding) => total + holding.allocationPct, 0);
-
-  if (othersAllocation > 0) {
-    topHoldings.push({
-      symbol: "Others",
-      name: "Others",
-      allocationPct: othersAllocation,
-    });
-  }
-
-  return topHoldings;
-}
-
 function CustomTooltip({ active, payload }: CustomTooltipProps) {
   if (active && payload && payload.length > 0) {
-    const data = payload[0].payload;
+    const datum = payload[0].payload;
     const value = payload[0].value;
     return (
       <div
@@ -218,10 +229,42 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
         }}
       >
         <p className="font-mono font-medium">
-          {data.symbol}: {Number.isFinite(value) ? value.toFixed(2) : 0}%
+          {datum.label}: {Number.isFinite(value) ? value.toFixed(2) : 0}%
         </p>
       </div>
     );
   }
   return null;
+}
+
+function buildFundData(holdings: MutualFundHolding[]): DonutDatum[] {
+  const sorted = [...holdings].sort(
+    (a, b) => b.allocationPct - a.allocationPct,
+  );
+  const top = sorted.slice(0, 8).map((h) => ({
+    label: h.schemeName,
+    allocationPct: h.allocationPct,
+  }));
+  const othersPct = sorted
+    .slice(8)
+    .reduce((sum, h) => sum + h.allocationPct, 0);
+  if (othersPct > 0) {
+    top.push({ label: "Others", allocationPct: othersPct });
+  }
+  return top;
+}
+
+function buildCategoryData(holdings: MutualFundHolding[]): DonutDatum[] {
+  const totals = new Map<string, number>();
+  for (const h of holdings) {
+    const key = h.category && h.category.trim().length > 0 ? h.category : "Uncategorised";
+    totals.set(key, (totals.get(key) ?? 0) + h.allocationPct);
+  }
+  return Array.from(totals.entries())
+    .map(([label, allocationPct]) => ({ label, allocationPct }))
+    .sort((a, b) => b.allocationPct - a.allocationPct);
+}
+
+function truncateLabel(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
