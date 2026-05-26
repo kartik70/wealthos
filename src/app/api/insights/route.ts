@@ -55,7 +55,7 @@ export async function POST(request: Request): Promise<Response> {
 
     const { data: snapshot, error: snapshotError } = await supabase
       .from("portfolio_snapshots")
-      .select("id,user_id,created_at,total_value,total_cost,total_gain,total_gain_pct,source,raw_data")
+      .select("id,user_id,created_at,total_value,total_cost,total_gain,total_gain_pct,source,raw_data,context_cache")
       .eq("id", body.snapshotId)
       .maybeSingle();
 
