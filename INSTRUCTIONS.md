@@ -319,7 +319,9 @@ Chunks are prefixed with `[date | chunk_type]` metadata before embedding so temp
 
 Embeddings use Gemini `gemini-embedding-001`, 768 dimensions (truncated via `.slice(0, 768)`).
 
-Chat history: last 10 messages passed as conversation history. Capped at 800 max_tokens response.
+Chat history: with Anthropic, once history exceeds 8 messages the older ones are summarised into a 2-sentence note (one extra LLM call) and only the last 6 are passed verbatim; if summarisation fails, history is truncated to the last 6. With Gemini the full history is passed as-is. The Anthropic system prompt uses prompt caching (`cache_control: ephemeral`). Response capped at 800 max_tokens.
+
+Rate limit: 20 user messages per user per hour, counted from `advisor_conversations` (persistent, survives cold starts).
 
 ### Latency Optimisations
 - Embedding cache: LRU cache (100 entries) prevents repeat Gemini API calls
