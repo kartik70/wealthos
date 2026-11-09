@@ -76,19 +76,30 @@ function getDefaultAIProvider(): AIProvider {
   return isAIProvider(configured) ? configured : "anthropic";
 }
 
+const LLM_TIMEOUT_MS = 90_000;
+
 async function generateText(
   prompt: string,
   provider: AIProvider,
   maxTokens: number,
   apiKey?: string,
 ): Promise<string> {
-  if (provider === "gemini") {
-    return generateWithGemini(prompt, maxTokens, apiKey);
-  }
-  if (provider === "openrouter" || provider === "groq") {
-    return generateWithOpenAICompat(prompt, maxTokens, provider, apiKey);
-  }
-  return generateWithAnthropic(prompt, maxTokens, apiKey);
+  const call =
+    provider === "gemini"
+      ? generateWithGemini(prompt, maxTokens, apiKey)
+      : provider === "openrouter" || provider === "groq"
+        ? generateWithOpenAICompat(prompt, maxTokens, provider, apiKey)
+        : generateWithAnthropic(prompt, maxTokens, apiKey);
+
+  return Promise.race([
+    call,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`${provider} LLM call timed out after ${LLM_TIMEOUT_MS / 1000}s`)),
+        LLM_TIMEOUT_MS,
+      )
+    ),
+  ]);
 }
 
 async function generateWithAnthropic(
@@ -147,6 +158,7 @@ async function generateWithGemini(
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
       maxOutputTokens: maxTokens,
+      responseMimeType: "application/json",
     },
   });
 

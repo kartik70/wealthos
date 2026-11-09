@@ -20,6 +20,7 @@ import type {
 import type { AIProvider } from "../../../lib/ai/provider";
 
 export const runtime = "nodejs";
+export const maxDuration = 120; // seconds; LLM calls should finish well within this
 
 type HoldingRow = Database["public"]["Tables"]["holdings"]["Row"];
 type SnapshotRow = Database["public"]["Tables"]["portfolio_snapshots"]["Row"];
