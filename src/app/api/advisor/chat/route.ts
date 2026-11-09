@@ -38,7 +38,6 @@ type ConversationInsert = {
 
 const RATE_LIMIT_MAX_MESSAGES = 20;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
-const advisorRateLimit = new Map<string, { count: number; windowStart: number }>();
 
 const ADVISOR_SYSTEM_PROMPT = `Guardrails:
 - If the user asks anything unrelated to their portfolio, investing, or personal finance, respond in one short sentence and redirect to what WealthOS can analyze from their portfolio data.
@@ -79,7 +78,7 @@ export async function POST(request: Request): Promise<Response> {
   }
   const { supabase, userId } = auth.data;
 
-  if (isRateLimited(userId)) {
+  if (await isRateLimited(supabase, userId)) {
     return Response.json(
       { error: "Too many requests, please wait before sending more messages" },
       { status: 429 },
@@ -102,6 +101,7 @@ export async function POST(request: Request): Promise<Response> {
   let retrievedChunksCount: number;
   let retrievedChunkTypes: string[];
   let currentSnapshot: PortfolioSnapshot | null;
+  let mfSummary: string | null = null;
   try {
     // Fix 2: question embedding and snapshot fetch are independent — run in parallel.
     const geminiApiKey = await resolveGeminiKey(userId);
@@ -109,7 +109,8 @@ export async function POST(request: Request): Promise<Response> {
       generateEmbedding(sanitizedMessage, geminiApiKey),
       fetchCurrentSnapshot(supabase, userId),
     ]);
-    currentSnapshot = snapshotResult;
+    currentSnapshot = snapshotResult.snapshot;
+    mfSummary = snapshotResult.mfSummary;
     const queryAnalysis = analyseQuery(
       sanitizedMessage,
       currentSnapshot?.holdings ?? [],
@@ -132,6 +133,11 @@ export async function POST(request: Request): Promise<Response> {
     throw err;
   }
 
+  // Extract symbols mentioned in recent conversation for multi-turn awareness.
+  const recentSymbols = conversationHistory
+    .slice(-4)
+    .flatMap((msg) => analyseQuery(msg.content, currentSnapshot?.holdings ?? []).symbols);
+
   // Run the LangGraph research agent: extract symbols → (optionally) fetch
   // real-time market news via Tavily → assemble final context.
   let finalContext: string;
@@ -142,8 +148,9 @@ export async function POST(request: Request): Promise<Response> {
       question: sanitizedMessage,
       userId,
       ragContext: retrievedContext,
-      currentSnapshotText: buildCurrentSnapshotText(currentSnapshot),
+      currentSnapshotText: buildCurrentSnapshotText(currentSnapshot, mfSummary),
       snapshot: currentSnapshot,
+      additionalSymbols: recentSymbols,
     });
     finalContext = agentResult.finalContext;
     usedMarketNews = agentResult.usedMarketNews;
@@ -152,7 +159,7 @@ export async function POST(request: Request): Promise<Response> {
     // Tavily failure (e.g., missing key or upstream timeout) should not break
     // the chat — fall back to plain RAG + snapshot context.
     console.error("[advisor/chat] research agent failed:", err);
-    const snapshotText = buildCurrentSnapshotText(currentSnapshot);
+    const snapshotText = buildCurrentSnapshotText(currentSnapshot, mfSummary);
     finalContext = `PORTFOLIO HISTORY (from your data):\n${retrievedContext}\n\nCURRENT PORTFOLIO:\n${snapshotText === "" ? "(no snapshot uploaded yet)" : snapshotText}`;
   }
 
@@ -232,24 +239,19 @@ function stripHtmlAndScriptTags(input: string): string {
     .replace(/\s+/g, " ");
 }
 
-function isRateLimited(userId: string): boolean {
-  const now = Date.now();
-  const current = advisorRateLimit.get(userId);
-
-  if (current === undefined || now - current.windowStart >= RATE_LIMIT_WINDOW_MS) {
-    advisorRateLimit.set(userId, { count: 1, windowStart: now });
-    return false;
-  }
-
-  if (current.count >= RATE_LIMIT_MAX_MESSAGES) {
-    return true;
-  }
-
-  advisorRateLimit.set(userId, {
-    count: current.count + 1,
-    windowStart: current.windowStart,
-  });
-  return false;
+// ponytail: uses existing advisor_conversations table — no extra infra, survives cold starts
+async function isRateLimited(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  userId: string,
+): Promise<boolean> {
+  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
+  const { count } = await supabase
+    .from("advisor_conversations")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("role", "user")
+    .gte("created_at", windowStart);
+  return (count ?? 0) >= RATE_LIMIT_MAX_MESSAGES;
 }
 
 async function saveConversationTurn(
@@ -281,8 +283,7 @@ async function saveConversationTurn(
 async function fetchCurrentSnapshot(
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
   userId: string,
-): Promise<PortfolioSnapshot | null> {
-
+): Promise<{ snapshot: PortfolioSnapshot | null; mfSummary: string | null }> {
   const { data: snapshotRow } = await supabase
     .from("portfolio_snapshots")
     .select("*")
@@ -291,14 +292,26 @@ async function fetchCurrentSnapshot(
     .limit(1)
     .maybeSingle();
 
-  if (snapshotRow === null) return null;
+  if (snapshotRow === null) return { snapshot: null, mfSummary: null };
 
-  const { data: holdingRows } = await supabase
-    .from("holdings")
-    .select("*")
-    .eq("snapshot_id", snapshotRow.id);
+  const [{ data: holdingRows }, { data: mfRow }] = await Promise.all([
+    supabase.from("holdings").select("*").eq("snapshot_id", snapshotRow.id),
+    supabase
+      .from("mutual_fund_snapshots")
+      .select("total_current_value, total_returns_pct")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
-  return rowToSnapshot(snapshotRow, holdingRows ?? []);
+  const snapshot = rowToSnapshot(snapshotRow, holdingRows ?? []);
+  const mfSummary =
+    mfRow !== null
+      ? `MF total: ₹${(mfRow.total_current_value as number).toFixed(0)} (${(mfRow.total_returns_pct as number) >= 0 ? "+" : ""}${(mfRow.total_returns_pct as number).toFixed(1)}%)`
+      : null;
+
+  return { snapshot, mfSummary };
 }
 
 function rowToSnapshot(row: PortfolioSnapshotRow, holdingRows: HoldingRow[]): PortfolioSnapshot {

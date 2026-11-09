@@ -47,12 +47,13 @@ Answer the user's question grounded in the context above.`;
  * building the section from the snapshot if the cache is null (e.g. older
  * snapshots that predate the cache column).
  */
-export function buildCurrentSnapshotText(snapshot: PortfolioSnapshot | null): string {
+export function buildCurrentSnapshotText(snapshot: PortfolioSnapshot | null, mfSummary?: string | null): string {
   if (snapshot === null) return "";
-  if (snapshot.contextCache !== null && snapshot.contextCache !== undefined && snapshot.contextCache !== "") {
-    return snapshot.contextCache;
-  }
-  return buildCurrentSnapshotSection(snapshot).trim();
+  const base =
+    snapshot.contextCache !== null && snapshot.contextCache !== undefined && snapshot.contextCache !== ""
+      ? snapshot.contextCache
+      : buildCurrentSnapshotSection(snapshot).trim();
+  return mfSummary ? `${base} | ${mfSummary}` : base;
 }
 
 function buildCurrentSnapshotSection(snapshot: PortfolioSnapshot): string {

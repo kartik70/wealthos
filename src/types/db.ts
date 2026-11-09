@@ -16,7 +16,7 @@ export type PortfolioSnapshotRow = {
   total_gain_pct: number;
   source: "kite" | "groww" | "manual" | null;
   raw_data: Json | null;
-  context_cache: string | null;
+  context_cache?: string | null;
 };
 
 export type HoldingRow = {

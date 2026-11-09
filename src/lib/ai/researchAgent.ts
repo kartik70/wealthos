@@ -56,6 +56,10 @@ const ResearchStateAnnotation = Annotation.Root({
   ragContext: Annotation<string>(),
   currentSnapshotText: Annotation<string>(),
   snapshot: Annotation<PortfolioSnapshot | null>(),
+  additionalSymbols: Annotation<string[]>({
+    reducer: (_prev, next) => next,
+    default: () => [],
+  }),
   mentionedSymbols: Annotation<string[]>({
     reducer: (_prev, next) => next,
     default: () => [],
@@ -88,6 +92,7 @@ export async function runResearchAgent(params: {
   ragContext: string;
   currentSnapshotText: string;
   snapshot: PortfolioSnapshot | null;
+  additionalSymbols?: string[];
 }): Promise<ResearchAgentResult> {
   const graph = buildGraph();
   const result = await graph.invoke({
@@ -96,6 +101,7 @@ export async function runResearchAgent(params: {
     ragContext: params.ragContext,
     currentSnapshotText: params.currentSnapshotText,
     snapshot: params.snapshot,
+    additionalSymbols: params.additionalSymbols ?? [],
   });
 
   return {
@@ -146,7 +152,7 @@ function extractSymbolsNode(state: ResearchState): Partial<ResearchState> {
     }
   }
 
-  let symbols = dedupe(directMatches);
+  let symbols = dedupe([...directMatches, ...state.additionalSymbols]);
 
   // Intent-based expansion: exit/hold-style questions → surface loss positions.
   if (symbols.length === 0 && hasExitIntent(upperQuestion) && holdings.length > 0) {

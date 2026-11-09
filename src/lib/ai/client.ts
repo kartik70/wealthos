@@ -198,6 +198,29 @@ export async function streamAdvisorResponse({
   });
 }
 
+const SUMMARY_THRESHOLD = 8;
+const KEEP_RECENT = 6;
+
+async function compressHistory(
+  history: AdvisorChatMessage[],
+  summarise: (old: AdvisorChatMessage[]) => Promise<string>,
+): Promise<AdvisorChatMessage[]> {
+  if (history.length <= SUMMARY_THRESHOLD) return history;
+  const toSummarise = history.slice(0, -KEEP_RECENT);
+  const recent = history.slice(-KEEP_RECENT);
+  try {
+    const summary = await summarise(toSummarise);
+    return [
+      { role: "user", content: `[Earlier conversation: ${summary}]` },
+      { role: "assistant", content: "Understood." },
+      ...recent,
+    ];
+  } catch {
+    // ponytail: summarisation failure → just truncate, never break chat
+    return recent;
+  }
+}
+
 async function streamAdvisorAnthropic({
   apiKey,
   systemPrompt,
@@ -217,10 +240,18 @@ async function streamAdvisorAnthropic({
     throw new MissingApiKeyError("anthropic");
   }
 
-  const historyWindow = conversationHistory.slice(-10);
   const client = new Anthropic({ apiKey: resolvedApiKey });
+
+  const compressedHistory = await compressHistory(conversationHistory, (old) =>
+    generateWithAnthropic(
+      `Summarise this portfolio advisor conversation in 2 sentences. Focus on stocks discussed and key decisions.\n\n${old.map((m) => `${m.role}: ${m.content}`).join("\n")}`,
+      150,
+      resolvedApiKey,
+    ),
+  );
+
   const messages: Anthropic.MessageParam[] = [
-    ...historyWindow.map((message) => ({
+    ...compressedHistory.map((message) => ({
       role: message.role,
       content: message.content,
     })),
@@ -230,7 +261,8 @@ async function streamAdvisorAnthropic({
   const stream = client.messages.stream({
     model: "claude-sonnet-4-20250514",
     max_tokens: 800,
-    system: systemPrompt,
+    // cache_control caches the system prompt prefix — effective when portfolio context is stable
+    system: [{ type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } }],
     messages,
   });
 

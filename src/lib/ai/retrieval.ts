@@ -168,9 +168,9 @@ function formatChunks(chunks: SearchResult[]): string {
 }
 
 function truncateChunkContent(content: string): string {
-  if (content.length <= 300) {
+  if (content.length <= 1000) {
     return content;
   }
 
-  return `${content.slice(0, 300)}...`;
+  return `${content.slice(0, 1000)}...`;
 }
