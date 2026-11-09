@@ -203,7 +203,7 @@ create table snapshot_embeddings (
   id uuid primary key default gen_random_uuid(),
   snapshot_id uuid references portfolio_snapshots not null,
   user_id text not null,
-  chunk_type text check (chunk_type in ('snapshot_summary', 'diff_summary', 'insight_summary')),
+  chunk_type text check (chunk_type in ('snapshot_summary', 'diff_summary', 'insight_summary', 'goal_summary')),
   content text not null,
   embedding vector(768),
   created_at timestamptz default now()
@@ -268,22 +268,50 @@ Two queries run in parallel:
 - Vector search: cosine similarity via pgvector `<=>` operator
 - Keyword search: Postgres full-text search via `tsvector` + `plainto_tsquery`
 
-Results merged using Reciprocal Rank Fusion (RRF, k=60). Final top 5 chunks passed to Claude / Gemini.
+Implemented in `src/lib/ai/retrieval.ts` via two Supabase RPCs, each returning 10 rows:
+- `match_snapshot_embeddings_filtered` (vector)
+- `keyword_search_snapshot_embeddings` (full-text)
+
+Results merged using Reciprocal Rank Fusion (RRF, k=60). Final top 5 chunks (each truncated to 1000 chars) passed to Claude / Gemini.
+
+Fallbacks:
+- Both searches empty → the user's 5 most recent chunks.
+- User has no chunks at all → `"No portfolio history available."`
 
 ### Query Analysis (pre-retrieval)
-Before embedding the question, `analyseQuery()` (in `src/lib/ai/queryAnalyser.ts`) extracts:
+Before retrieval, `analyseQuery()` (in `src/lib/ai/queryAnalyser.ts`) extracts:
 - Relevant symbols from the question + current holdings context
 - Optimal chunk types for the query intent
 - Date range if a temporal reference is detected
 
-All filtering is applied at the DB query level for efficiency. Pure string matching — no LLM call.
+Chunk-type routing is first-match-wins on keywords:
+
+| Keywords (examples) | Chunk type searched |
+|---|---|
+| changed, bought, sold, when did, added, exited | `diff_summary` |
+| analysis, recommendation, advice, should i | `insight_summary` |
+| goal, target, retirement, on track | `goal_summary` |
+| portfolio, value, allocation, worth | `snapshot_summary` |
+| (none of the above) | all four types |
+
+Date ranges: "last week" (7d), "last month" / "this month" (30d), "last year" (365d), "today" / "latest" (7d), or a month name (that month, previous year if the month is in the future).
+
+Chunk types and date range are applied at the DB query level. Pure string matching — no LLM call.
+
+Note: `symbols` is returned by `analyseQuery()` and passed in `RetrieveOptions`, but `retrieveRelevantContext()` does not currently filter on it. Symbols are only used by the research agent (see below) and multi-turn symbol carry-over (last 4 messages).
 
 ### Chunking Strategy: Record-based semantic chunking
 Four chunk types stored in `snapshot_embeddings`:
-- `snapshot_summary` — full portfolio state on a date (all holdings, values, gain/loss)
+- `snapshot_summary` — portfolio state on a date: total value, gain/loss, **top 5 holdings** by allocation, plus a mutual-fund sentence (total, returns, top 3 funds) when an MF snapshot exists for the same date
 - `diff_summary` — changes between previous and current snapshot (buys, sells, profit bookings)
 - `insight_summary` — AI commentary from that date
-- `goal_summary` — goal progress / corpus gap
+- `goal_summary` — goal progress / corpus gap, projected value and status (ON TRACK / NEEDS ATTENTION / OFF TRACK) against combined equity + MF value
+
+### When embeddings are written
+- Upload (`/api/upload`): `embedSnapshot()` runs fire-and-forget (not awaited; failures only logged). `context_cache` is written to the snapshot row first.
+- Goals create/update (`/api/goals`, `/api/goals/[id]`): `embedGoals()` deletes all of the user's `goal_summary` rows and re-inserts one per goal.
+- Backfill: `/api/admin/embed-all` (embeddings) and `/api/admin/backfill-context-cache` (context cache), both admin-secret protected.
+- `embedSnapshot()` deletes the snapshot's existing chunks before inserting, so re-runs are idempotent.
 
 Each chunk = one complete business event, not an arbitrary token window. The `content_tsv` column is auto-generated (GENERATED ALWAYS AS) for full-text search.
 
@@ -320,6 +348,8 @@ Claude / Gemini generates grounded answer
 Rules:
 - Symbol extraction is pure string matching against the user's current holdings (no LLM call).
 - Exit/hold intent ("should I exit", "sell", "trim") with no explicit symbol expands to the top loss positions.
+- Symbols from the last 4 conversation messages are carried over, so follow-up questions keep their subject.
+- Tavily is only called for forward-looking questions (`isForwardLookingQuestion()`: "should i", "outlook", "latest news", ...). Historical questions ("when did i buy", "what changed") and generic ones ("summary", "tax", "allocation", "goal") skip it.
 - Tavily is capped at 3 symbols per request and uses the `news` topic with `searchDepth: "basic"`.
 - If `TAVILY_API_KEY` is missing or Tavily fails, the agent falls back to plain RAG + snapshot context — chat never breaks.
 - The system prompt instructs the LLM to cite whether each claim is grounded in portfolio data or current market news.
@@ -329,7 +359,7 @@ Rules:
 
 ## Upload flow
 
-**Kite (equity):** CSV file + report date → `parseKiteCSV` → `calcAllocationPct` + `calcPortfolioTotals` → insert `portfolio_snapshots` + `holdings` → `embedSnapshot`
+**Kite (equity):** CSV file + report date → `parseKiteCSV` → `calcAllocationPct` + `calcPortfolioTotals` → insert `portfolio_snapshots` + `holdings` → write `context_cache` → `embedSnapshot` (fire-and-forget)
 
 **Groww (MF):** XLSX file → `parseGrowwXLSX` (date auto-extracted from row 17: 'HOLDINGS AS ON YYYY-MM-DD') → insert `mutual_fund_snapshots` + `mutual_fund_holdings`
 

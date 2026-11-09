@@ -53,13 +53,15 @@ Generate text chunks per snapshot:
   - insight_summary (AI commentary)
   - goal_summary (goal progress)
         ↓
-Embed via Gemini text-embedding-004 (768 dims)
+Embed via Gemini gemini-embedding-001 (truncated to 768 dims)
         ↓
 Store in Supabase pgvector (with auto-generated tsvector column for FTS)
         ↓
 At query time: analyse query → hybrid search → RRF merge → top 5 chunks
         ↓
-Inject retrieved context + current snapshot into Claude system prompt
+Research agent (LangGraph): optionally add live Tavily news for forward-looking questions
+        ↓
+Inject retrieved context + current snapshot (+ news) into the LLM system prompt
         ↓
 Answer grounded in actual portfolio history
 ```
@@ -75,7 +77,7 @@ Results merged via Reciprocal Rank Fusion for best of both worlds.
 
 ### Smart Query Routing
 Before retrieval, the query is analysed to extract:
-- Mentioned stock symbols → filter chunks to relevant holdings
+- Mentioned stock symbols → used by the research agent to pick which holdings to fetch news for
 - Query intent → route to optimal chunk types (diff for change questions, insight for advice questions)
 - Temporal references → filter to relevant date range
 
@@ -87,7 +89,7 @@ No LLM call needed — pure string matching for zero added latency.
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js 15 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Language | TypeScript (strict) |
 | Styling | Tailwind CSS + shadcn/ui (Nova preset) |
 | State | Zustand |
