@@ -10,7 +10,7 @@ import {
   parseMissingApiKeyPayload,
   type MissingApiKey,
 } from "@/components/ui/ApiKeyPrompt";
-import { withAIProviderHeaders } from "@/lib/ai/provider";
+import { withAIHeaders } from "@/lib/ai/provider";
 import { useAdvisorStore, type ChatMessage } from "@/stores/advisorStore";
 
 const SUGGESTED_QUESTIONS = [
@@ -126,7 +126,7 @@ export default function AdvisorPage() {
       try {
         const response = await fetch("/api/advisor/chat", {
           method: "POST",
-          headers: withAIProviderHeaders({ "Content-Type": "application/json" }),
+          headers: withAIHeaders({ "Content-Type": "application/json" }),
           body: JSON.stringify({ message: trimmed, conversationHistory }),
         });
 

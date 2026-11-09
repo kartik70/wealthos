@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { withAIProviderHeaders } from "@/lib/ai/provider";
+import { withAIHeaders } from "@/lib/ai/provider";
 import {
   ApiKeyPrompt,
   parseMissingApiKeyPayload,
@@ -180,7 +180,7 @@ export default function InsightsPage() {
     try {
       const response = await fetch("/api/insights/detailed", {
         method: "POST",
-        headers: withAIProviderHeaders({ "Content-Type": "application/json" }),
+        headers: withAIHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ snapshotId }),
       });
 

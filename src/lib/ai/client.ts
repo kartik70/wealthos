@@ -37,8 +37,9 @@ export async function generateInsight(
   prompt: string,
   provider: AIProvider = getDefaultAIProvider(),
   apiKey?: string,
+  modelOverride?: string,
 ): Promise<InsightResponse> {
-  const text = await generateText(prompt, provider, 4000, apiKey);
+  const text = await generateText(prompt, provider, 4000, apiKey, modelOverride);
   return parseInsightResponse(stripCodeFences(text));
 }
 
@@ -46,10 +47,11 @@ export async function generateDetailedInsight(
   prompt: string,
   provider: AIProvider = getDefaultAIProvider(),
   apiKey?: string,
+  modelOverride?: string,
 ): Promise<DetailedInsightResponse> {
   // Deep analysis output is materially larger than the dashboard insight
   // (9 sections incl. per-stock + per-fund verdicts), so it needs more room.
-  const text = await generateText(prompt, provider, 8000, apiKey);
+  const text = await generateText(prompt, provider, 8000, apiKey, modelOverride);
   return parseDetailedInsightResponse(stripCodeFences(text));
 }
 
@@ -83,13 +85,14 @@ async function generateText(
   provider: AIProvider,
   maxTokens: number,
   apiKey?: string,
+  modelOverride?: string,
 ): Promise<string> {
   const call =
     provider === "gemini"
-      ? generateWithGemini(prompt, maxTokens, apiKey)
+      ? generateWithGemini(prompt, maxTokens, apiKey, modelOverride)
       : provider === "openrouter" || provider === "groq"
-        ? generateWithOpenAICompat(prompt, maxTokens, provider, apiKey)
-        : generateWithAnthropic(prompt, maxTokens, apiKey);
+        ? generateWithOpenAICompat(prompt, maxTokens, provider, apiKey, modelOverride)
+        : generateWithAnthropic(prompt, maxTokens, apiKey, modelOverride);
 
   return Promise.race([
     call,
@@ -106,6 +109,7 @@ async function generateWithAnthropic(
   prompt: string,
   maxTokens: number,
   apiKey?: string,
+  modelOverride?: string,
 ): Promise<string> {
   const resolvedApiKey = apiKey ?? process.env.ANTHROPIC_API_KEY;
 
@@ -119,7 +123,7 @@ async function generateWithAnthropic(
       : new Anthropic({ apiKey: resolvedApiKey });
 
   const response = await client.messages.create({
-    model: ANTHROPIC_MODEL,
+    model: modelOverride ?? ANTHROPIC_MODEL,
     max_tokens: maxTokens,
     messages: [{ role: "user", content: prompt }],
   });
@@ -141,6 +145,7 @@ async function generateWithGemini(
   prompt: string,
   maxTokens: number,
   apiKey?: string,
+  modelOverride?: string,
 ): Promise<string> {
   const resolvedApiKey = apiKey ?? process.env.GEMINI_API_KEY;
 
@@ -153,7 +158,7 @@ async function generateWithGemini(
       ? (geminiClient ??= new GoogleGenerativeAI(resolvedApiKey))
       : new GoogleGenerativeAI(resolvedApiKey);
 
-  const model = client.getGenerativeModel({ model: GEMINI_FLASH_MODEL });
+  const model = client.getGenerativeModel({ model: modelOverride ?? GEMINI_FLASH_MODEL });
   const response = await model.generateContent({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
@@ -176,6 +181,7 @@ async function generateWithOpenAICompat(
   maxTokens: number,
   provider: "openrouter" | "groq",
   apiKey?: string,
+  modelOverride?: string,
 ): Promise<string> {
   const envKey = provider === "openrouter" ? process.env.OPENROUTER_API_KEY : process.env.GROQ_API_KEY;
   const resolvedApiKey = apiKey ?? envKey;
@@ -189,7 +195,7 @@ async function generateWithOpenAICompat(
       ? "https://openrouter.ai/api/v1"
       : "https://api.groq.com/openai/v1";
 
-  const model = provider === "openrouter" ? OPENROUTER_MODEL : GROQ_MODEL;
+  const model = modelOverride ?? (provider === "openrouter" ? OPENROUTER_MODEL : GROQ_MODEL);
 
   const client = new OpenAI({ apiKey: resolvedApiKey, baseURL });
   const response = await client.chat.completions.create({
@@ -213,6 +219,7 @@ export interface AdvisorChatMessage {
 export async function streamAdvisorResponse({
   provider,
   apiKey,
+  modelOverride,
   systemPrompt,
   contextMessage,
   conversationHistory,
@@ -221,6 +228,7 @@ export async function streamAdvisorResponse({
 }: {
   provider: AIProvider;
   apiKey?: string;
+  modelOverride?: string;
   systemPrompt: string;
   /** Dynamic per-request portfolio context. When provided it is injected as a
    *  user message before the conversation history, keeping the system prompt
@@ -233,6 +241,7 @@ export async function streamAdvisorResponse({
   if (provider === "gemini") {
     return streamAdvisorGemini({
       apiKey,
+      modelOverride,
       systemPrompt,
       contextMessage,
       conversationHistory,
@@ -245,6 +254,7 @@ export async function streamAdvisorResponse({
     return streamAdvisorOpenAICompat({
       provider,
       apiKey,
+      modelOverride,
       systemPrompt,
       contextMessage,
       conversationHistory,
@@ -255,6 +265,7 @@ export async function streamAdvisorResponse({
 
   return streamAdvisorAnthropic({
     apiKey,
+    modelOverride,
     systemPrompt,
     contextMessage,
     conversationHistory,
@@ -288,6 +299,7 @@ async function compressHistory(
 
 async function streamAdvisorAnthropic({
   apiKey,
+  modelOverride,
   systemPrompt,
   contextMessage,
   conversationHistory,
@@ -295,6 +307,7 @@ async function streamAdvisorAnthropic({
   onDelta,
 }: {
   apiKey?: string;
+  modelOverride?: string;
   systemPrompt: string;
   contextMessage?: string;
   conversationHistory: AdvisorChatMessage[];
@@ -337,7 +350,7 @@ async function streamAdvisorAnthropic({
   ];
 
   const stream = client.messages.stream({
-    model: ANTHROPIC_MODEL,
+    model: modelOverride ?? ANTHROPIC_MODEL,
     max_tokens: 800,
     // cache_control caches the system prompt prefix — effective when portfolio context is stable
     system: [{ type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } }],
@@ -361,6 +374,7 @@ async function streamAdvisorAnthropic({
 
 async function streamAdvisorGemini({
   apiKey,
+  modelOverride,
   systemPrompt,
   contextMessage,
   conversationHistory,
@@ -368,6 +382,7 @@ async function streamAdvisorGemini({
   onDelta,
 }: {
   apiKey?: string;
+  modelOverride?: string;
   systemPrompt: string;
   contextMessage?: string;
   conversationHistory: AdvisorChatMessage[];
@@ -382,7 +397,7 @@ async function streamAdvisorGemini({
 
   const gemini = new GoogleGenerativeAI(resolvedApiKey);
   const model = gemini.getGenerativeModel({
-    model: GEMINI_FLASH_MODEL,
+    model: modelOverride ?? GEMINI_FLASH_MODEL,
     systemInstruction: systemPrompt,
   });
 
@@ -420,6 +435,7 @@ async function streamAdvisorGemini({
 async function streamAdvisorOpenAICompat({
   provider,
   apiKey,
+  modelOverride,
   systemPrompt,
   contextMessage,
   conversationHistory,
@@ -428,6 +444,7 @@ async function streamAdvisorOpenAICompat({
 }: {
   provider: "openrouter" | "groq";
   apiKey?: string;
+  modelOverride?: string;
   systemPrompt: string;
   contextMessage?: string;
   conversationHistory: AdvisorChatMessage[];
@@ -446,7 +463,7 @@ async function streamAdvisorOpenAICompat({
       ? "https://openrouter.ai/api/v1"
       : "https://api.groq.com/openai/v1";
 
-  const model = provider === "openrouter" ? OPENROUTER_MODEL : GROQ_MODEL;
+  const model = modelOverride ?? (provider === "openrouter" ? OPENROUTER_MODEL : GROQ_MODEL);
 
   const client = new OpenAI({ apiKey: resolvedApiKey, baseURL });
 

@@ -12,9 +12,12 @@ import { createSupabaseBrowserClient } from "@/lib/db/supabase";
 import {
   getStoredAIProvider,
   setStoredAIProvider,
+  getStoredModelForProvider,
+  setStoredModelForProvider,
   providerLabel,
   type AIProvider,
 } from "@/lib/ai/provider";
+import type { ModelOption } from "@/app/api/settings/models/route";
 import type { PortfolioSnapshot } from "@/types/portfolio";
 
 interface AllSnapshotsResponse {
@@ -104,6 +107,12 @@ export default function SettingsPage() {
   });
   const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(true);
   const [isSavingApiKeys, setIsSavingApiKeys] = useState(false);
+  const [models, setModels] = useState<ModelOption[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<string>(
+    () => getStoredModelForProvider(getStoredAIProvider() ?? "anthropic") ?? "",
+  );
+  const [modelFilter, setModelFilter] = useState("");
 
   const loadSnapshots = useCallback(async () => {
     setIsLoadingSnapshots(true);
@@ -170,10 +179,35 @@ export default function SettingsPage() {
     void loadApiKeys();
   }, [loadApiKeys, loadSnapshots]);
 
+  const loadModels = useCallback(async (p: AIProvider) => {
+    setIsLoadingModels(true);
+    setModels([]);
+    try {
+      const res = await fetch(`/api/settings/models?provider=${p}`);
+      const data = (await res.json()) as { models?: ModelOption[]; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to load models");
+      setModels(data.models ?? []);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load models");
+    } finally {
+      setIsLoadingModels(false);
+    }
+  }, []);
+
   function handleProviderChange(nextProvider: AIProvider) {
     setProvider(nextProvider);
     setStoredAIProvider(nextProvider);
+    setSelectedModel(getStoredModelForProvider(nextProvider) ?? "");
+    setModelFilter("");
+    void loadModels(nextProvider);
     toast.success(`AI provider set to ${providerLabel(nextProvider)}`);
+  }
+
+  function handleModelSelect(modelId: string) {
+    const next = modelId === selectedModel ? "" : modelId;
+    setSelectedModel(next);
+    setStoredModelForProvider(provider, next);
+    toast.success(next === "" ? "Using default model" : `Model set to ${next}`);
   }
 
   async function signOut() {
@@ -614,6 +648,70 @@ export default function SettingsPage() {
             </p>
           </div>
         </div>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-6">
+        <SectionHeader label="Model" />
+        <p className="mt-2 mb-4 text-sm" style={{ color: "#8899aa" }}>
+          Choose a specific model for <strong>{providerLabel(provider)}</strong>. Leave blank to use the default.
+        </p>
+        <div className="flex gap-2 mb-3">
+          <input
+            type="text"
+            placeholder="Search models…"
+            value={modelFilter}
+            onChange={(e) => setModelFilter(e.target.value)}
+            className="flex-1 rounded-md border border-[#1e2d40] bg-[#0a0f1e] px-3 py-1.5 text-sm text-white placeholder:text-[#4a5568] focus:outline-none focus:ring-1 focus:ring-[#3b82f6]"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void loadModels(provider)}
+            disabled={isLoadingModels}
+          >
+            {isLoadingModels ? "Loading…" : "Load models"}
+          </Button>
+        </div>
+        {selectedModel !== "" && (
+          <p className="mb-2 text-xs" style={{ color: "#8899aa" }}>
+            Active: <span className="font-mono text-white">{selectedModel}</span>{" "}
+            <button
+              className="text-[#3b82f6] hover:underline"
+              onClick={() => handleModelSelect("")}
+            >
+              clear
+            </button>
+          </p>
+        )}
+        {models.length > 0 && (
+          <div className="max-h-48 overflow-y-auto rounded-md border border-[#1e2d40] divide-y divide-[#1e2d40]">
+            {models
+              .filter((m) =>
+                modelFilter === "" ||
+                m.id.toLowerCase().includes(modelFilter.toLowerCase()) ||
+                m.name.toLowerCase().includes(modelFilter.toLowerCase()),
+              )
+              .map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => handleModelSelect(m.id)}
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-[#0d1526] transition-colors ${
+                    selectedModel === m.id ? "bg-[#0d1526] text-[#3b82f6]" : "text-white"
+                  }`}
+                >
+                  <span className="font-mono truncate">{m.id}</span>
+                  <span className="flex shrink-0 items-center gap-1.5" style={{ color: "#8899aa" }}>
+                    {m.free === true && (
+                      <span className="rounded bg-green-900/50 px-1 py-0.5 text-[10px] text-green-400">
+                        free
+                      </span>
+                    )}
+                    {m.name !== m.id && <span className="text-xs truncate max-w-32">{m.name}</span>}
+                  </span>
+                </button>
+              ))}
+          </div>
+        )}
       </section>
 
       <section className="rounded-lg border border-border bg-card p-6">

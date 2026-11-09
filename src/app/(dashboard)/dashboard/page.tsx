@@ -18,7 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { withAIProviderHeaders } from "@/lib/ai/provider";
+import { withAIHeaders } from "@/lib/ai/provider";
 import {
   ApiKeyPrompt,
   parseMissingApiKeyPayload,
@@ -185,7 +185,7 @@ export default function DashboardPage() {
     try {
       const response = await fetch("/api/insights", {
         method: "POST",
-        headers: withAIProviderHeaders({ "Content-Type": "application/json" }),
+        headers: withAIHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ snapshotId: equitySnapshot.snapshotId }),
       });
 

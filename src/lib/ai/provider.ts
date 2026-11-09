@@ -67,3 +67,45 @@ export function withAIProviderHeaders(headers: HeadersInit = {}): HeadersInit {
   merged.set(AI_PROVIDER_HEADER, provider);
   return merged;
 }
+
+export const AI_MODEL_STORAGE_KEY_PREFIX = "wealthos:model:";
+export const AI_MODEL_HEADER = "x-ai-model";
+
+export function getStoredModelForProvider(provider: AIProvider): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(`${AI_MODEL_STORAGE_KEY_PREFIX}${provider}`);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredModelForProvider(provider: AIProvider, model: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (model === "") {
+      window.localStorage.removeItem(`${AI_MODEL_STORAGE_KEY_PREFIX}${provider}`);
+    } else {
+      window.localStorage.setItem(`${AI_MODEL_STORAGE_KEY_PREFIX}${provider}`, model);
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function getModelFromRequest(request: Request): string | null {
+  const v = request.headers.get(AI_MODEL_HEADER);
+  return v !== null && v.trim() !== "" ? v.trim() : null;
+}
+
+/** Sends both the provider and the selected model for that provider. */
+export function withAIHeaders(headers: HeadersInit = {}): HeadersInit {
+  const provider = getStoredAIProvider();
+  const merged = new Headers(headers);
+  if (provider !== null) {
+    merged.set(AI_PROVIDER_HEADER, provider);
+    const model = getStoredModelForProvider(provider);
+    if (model !== null) merged.set(AI_MODEL_HEADER, model);
+  }
+  return merged;
+}

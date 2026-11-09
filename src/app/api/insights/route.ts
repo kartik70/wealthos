@@ -6,7 +6,7 @@ import {
 } from "../../../lib/finance/calculations";
 import { calcTaxSummary } from "../../../lib/finance/tax";
 import { buildPortfolioPrompt } from "../../../features/ai/promptBuilder";
-import { getAIProviderFromRequest, isAIProvider } from "../../../lib/ai/provider";
+import { getAIProviderFromRequest, getModelFromRequest, isAIProvider } from "../../../lib/ai/provider";
 import {
   missingApiKeyResponse,
   resolveProviderKey,
@@ -106,9 +106,10 @@ export async function POST(request: Request): Promise<Response> {
     );
     const prompt = buildInsightPrompt(snapshot, metrics, mutualFundContext);
     const provider = getAIProviderFromRequest(request);
+    const modelOverride = getModelFromRequest(request) ?? undefined;
     const apiKey = await resolveProviderKey(userId, provider);
 
-    const insight = await generateInsight(prompt, provider, apiKey);
+    const insight = await generateInsight(prompt, provider, apiKey, modelOverride);
     // Never trust the model's generatedAt — overwrite with server time.
     insight.generatedAt = new Date().toISOString();
     const persistedPayload = {

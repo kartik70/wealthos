@@ -16,7 +16,7 @@ import {
 } from "../../../../features/ai/advisorPromptBuilder";
 import type { PortfolioSnapshot } from "../../../../types/portfolio";
 import type { HoldingRow, PortfolioSnapshotRow } from "../../../../types/db";
-import { getAIProviderFromRequest } from "../../../../lib/ai/provider";
+import { getAIProviderFromRequest, getModelFromRequest } from "../../../../lib/ai/provider";
 
 export const runtime = "nodejs";
 
@@ -86,6 +86,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const provider = getAIProviderFromRequest(request);
+  const modelOverride = getModelFromRequest(request) ?? undefined;
   let apiKey: string;
   try {
     apiKey = await resolveProviderKey(userId, provider);
@@ -186,6 +187,7 @@ export async function POST(request: Request): Promise<Response> {
         const assistantResponse = await streamAdvisorResponse({
           provider,
           apiKey,
+          modelOverride,
           systemPrompt,
           contextMessage: finalContext,
           conversationHistory,
