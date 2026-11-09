@@ -11,7 +11,7 @@ import { generateEmbedding } from "../../../../lib/ai/embeddings";
 import { analyseQuery } from "../../../../lib/ai/queryAnalyser";
 import { runResearchAgent } from "../../../../lib/ai/researchAgent";
 import {
-  buildAdvisorSystemPromptFromContext,
+  buildStaticAdvisorSystemPrompt,
   buildCurrentSnapshotText,
 } from "../../../../features/ai/advisorPromptBuilder";
 import type { PortfolioSnapshot } from "../../../../types/portfolio";
@@ -106,7 +106,7 @@ export async function POST(request: Request): Promise<Response> {
     // Fix 2: question embedding and snapshot fetch are independent — run in parallel.
     const geminiApiKey = await resolveGeminiKey(userId);
     const [questionEmbedding, snapshotResult] = await Promise.all([
-      generateEmbedding(sanitizedMessage, geminiApiKey),
+      generateEmbedding(sanitizedMessage, geminiApiKey, "RETRIEVAL_QUERY"),
       fetchCurrentSnapshot(supabase, userId),
     ]);
     currentSnapshot = snapshotResult.snapshot;
@@ -119,7 +119,6 @@ export async function POST(request: Request): Promise<Response> {
       topK: 5,
       chunkTypes: queryAnalysis.chunkTypes,
       dateRange: queryAnalysis.dateRange ?? undefined,
-      symbols: queryAnalysis.symbols,
       precomputedEmbedding: questionEmbedding,
     });
     retrievedContext = retrieval.context;
@@ -163,7 +162,7 @@ export async function POST(request: Request): Promise<Response> {
     finalContext = `PORTFOLIO HISTORY (from your data):\n${retrievedContext}\n\nCURRENT PORTFOLIO:\n${snapshotText === "" ? "(no snapshot uploaded yet)" : snapshotText}`;
   }
 
-  const systemPrompt = buildGuardrailedSystemPrompt(finalContext);
+  const systemPrompt = buildGuardrailedSystemPrompt();
 
   const encoder = new TextEncoder();
 
@@ -188,6 +187,7 @@ export async function POST(request: Request): Promise<Response> {
           provider,
           apiKey,
           systemPrompt,
+          contextMessage: finalContext,
           conversationHistory,
           userMessage: sanitizedMessage,
           onDelta(text) {
@@ -226,9 +226,8 @@ export async function POST(request: Request): Promise<Response> {
   });
 }
 
-function buildGuardrailedSystemPrompt(finalContext: string): string {
-  const basePrompt = buildAdvisorSystemPromptFromContext(finalContext);
-  return `${basePrompt}\n\n${ADVISOR_SYSTEM_PROMPT}`;
+function buildGuardrailedSystemPrompt(): string {
+  return `${buildStaticAdvisorSystemPrompt()}\n\n${ADVISOR_SYSTEM_PROMPT}`;
 }
 
 function stripHtmlAndScriptTags(input: string): string {

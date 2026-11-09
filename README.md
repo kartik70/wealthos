@@ -8,16 +8,18 @@ WealthOS is an open-source, AI-powered portfolio intelligence platform built for
 
 ---
 
+> **Not investment advice.** WealthOS displays AI-generated portfolio commentary for informational purposes only. BOOK PROFIT / HOLD / EXIT verdicts are automated outputs based on heuristics — they are not financial advice, do not account for your personal tax situation, and may be incorrect. Always consult a SEBI-registered investment advisor before making investment decisions.
+
 ## What it does
 
 Most broker dashboards show you numbers. WealthOS tells you what those numbers mean.
 
 - **Snapshot Timeline** — every portfolio state saved with a date. Compare any two snapshots. See exactly what changed, what was bought, sold, or profit-booked.
-- **AI Insights** — stock-by-stock verdicts (BOOK PROFIT / HOLD / EXIT), MF fund quality check, LTCG timing alerts, tax harvesting opportunities, and a ranked priority action plan.
+- **AI Insights** — stock-by-stock verdicts (BOOK PROFIT / HOLD / EXIT), MF fund quality check, tax harvesting opportunities, and a ranked priority action plan. (LTCG timing alerts require purchase dates — not yet available from broker exports.)
 - **Deep Analysis** — health score, sector classification, investor risk profile detection, fund overlap analysis, combined equity + MF view.
 - **RAG-Powered Advisor with Live Market Context** — conversational AI that retrieves relevant snapshots AND fetches real-time market news for mentioned holdings via a LangGraph research agent. Ask "should I hold JIOFIN?" and get an answer grounded in both your portfolio history and current market developments.
 - **Goals Tracking** — set a target corpus, track progress against combined equity + MF value, see projected value at target date.
-- **Bring Your Own Key** — self-host for free on Vercel. Add your own Anthropic or Gemini API key in settings.
+- **Bring Your Own Key** — self-host for free on Vercel. Add your own Anthropic, Gemini, OpenRouter, or Groq API key in settings. OpenRouter and Groq both offer free tiers.
 
 ---
 
@@ -96,14 +98,12 @@ No LLM call needed — pure string matching for zero added latency.
 | Charts | Recharts |
 | Database | Supabase (Postgres + pgvector) |
 | Auth | Supabase Google OAuth |
-| AI Chat | Anthropic Claude (claude-sonnet-4-20250514) |
-| AI Alternative | Google Gemini (gemini-2.0-flash) |
+| AI Chat | Anthropic Claude (claude-sonnet-4-20250514) · Gemini · OpenRouter · Groq |
+| AI Free Tier | OpenRouter (openrouter.ai) · Groq (console.groq.com) — both free, no billing required |
 | Embeddings | Google Gemini (gemini-embedding-001, 768 dims) |
-| Research Agent | LangGraph + Tavily Search | Multi-node async research workflow |
+| Research Workflow | LangGraph + Tavily Search | Conditional async research pipeline |
 | CSV Parsing | papaparse |
 | XLSX Parsing | SheetJS |
-| Email Alerts | Resend |
-| Cron | Vercel Cron Jobs |
 | Deployment | Vercel |
 
 ---
@@ -114,7 +114,7 @@ No LLM call needed — pure string matching for zero added latency.
 
 - Node.js 18+
 - A Supabase project (free tier works)
-- An Anthropic or Gemini API key
+- An API key for at least one provider: Anthropic, Gemini, OpenRouter (free at openrouter.ai), or Groq (free at console.groq.com)
 - A Google Cloud project with OAuth credentials
 
 ### Setup
@@ -147,9 +147,21 @@ AI_PROVIDER=anthropic                 # or gemini
 
 **3. Set up Supabase database**
 
-Run the SQL in `docs/schema.sql` in your Supabase SQL Editor. Enable the pgvector extension first:
+In your Supabase SQL Editor, run in order:
+
+a. Enable the pgvector extension (or do it in Dashboard → Database → Extensions):
 ```sql
 create extension if not exists vector;
+```
+
+b. Apply the schema (tables, indexes, RPC functions):
+```
+docs/schema.sql
+```
+
+c. Apply Row Level Security policies:
+```
+docs/rls.sql
 ```
 
 **4. Configure Google OAuth**

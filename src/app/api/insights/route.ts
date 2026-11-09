@@ -4,6 +4,7 @@ import {
   calcAllocationPct,
   calcPortfolioTotals,
 } from "../../../lib/finance/calculations";
+import { calcTaxSummary } from "../../../lib/finance/tax";
 import { buildPortfolioPrompt } from "../../../features/ai/promptBuilder";
 import { getAIProviderFromRequest, isAIProvider } from "../../../lib/ai/provider";
 import {
@@ -275,6 +276,7 @@ function buildInsightPrompt(
   metrics: PortfolioMetrics,
   mutualFundContext: { totals: MutualFundTotals; holdings: MutualFundHolding[] } | null,
 ): string {
+  const taxSummary = calcTaxSummary(metrics.holdings);
   return buildPortfolioPrompt({
     snapshot: {
       id: snapshot.id,
@@ -288,5 +290,6 @@ function buildInsightPrompt(
     holdings: metrics.holdings,
     mfTotals: mutualFundContext?.totals,
     mfHoldings: mutualFundContext?.holdings,
+    taxSummary,
   });
 }

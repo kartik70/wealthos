@@ -440,6 +440,8 @@ function readSource(formData: FormData): SnapshotSource {
   return source;
 }
 
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+
 function readKiteCsvFile(formData: FormData): File {
   const file = formData.get("file");
 
@@ -449,6 +451,15 @@ function readKiteCsvFile(formData: FormData): File {
 
   if (file.size === 0) {
     throw new Error("CSV file is empty");
+  }
+
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error("File exceeds the 10 MB maximum size limit");
+  }
+
+  const allowedTypes = ["text/csv", "text/plain", "application/vnd.ms-excel"];
+  if (file.type !== "" && !allowedTypes.includes(file.type)) {
+    throw new Error(`Unsupported file type: ${file.type}. Expected a CSV file.`);
   }
 
   const fileName = file.name.toLowerCase();
@@ -468,6 +479,18 @@ function readGrowwXlsxFile(formData: FormData): File {
 
   if (file.size === 0) {
     throw new Error("XLSX file is empty");
+  }
+
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error("File exceeds the 10 MB maximum size limit");
+  }
+
+  const allowedTypes = [
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+  ];
+  if (file.type !== "" && !allowedTypes.includes(file.type)) {
+    throw new Error(`Unsupported file type: ${file.type}. Expected an XLSX file.`);
   }
 
   const fileName = file.name.toLowerCase();

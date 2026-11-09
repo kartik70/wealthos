@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "crypto";
 import { requireAuth } from "@/lib/db/require-auth";
 import {
   missingApiKeyResponse,
@@ -18,8 +19,18 @@ export async function GET(request: Request): Promise<Response> {
       { status: 503 },
     );
   }
-  const providedSecret = request.headers.get("x-admin-secret");
-  if (providedSecret !== expectedSecret) {
+  const providedSecret = request.headers.get("x-admin-secret") ?? "";
+  const secretsMatch = (() => {
+    try {
+      return timingSafeEqual(
+        Buffer.from(providedSecret),
+        Buffer.from(expectedSecret),
+      );
+    } catch {
+      return false;
+    }
+  })();
+  if (!secretsMatch) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 

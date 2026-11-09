@@ -40,6 +40,22 @@ Answer the user's question grounded in the context above.`;
 }
 
 /**
+ * Returns the static advisor instructions with no per-request context embedded.
+ * Use this as the system prompt (with cache_control) and pass the dynamic
+ * portfolio context as a prepended user message via `contextMessage` in
+ * `streamAdvisorResponse`. This keeps the cached prefix stable across requests.
+ */
+export function buildStaticAdvisorSystemPrompt(): string {
+  return `You are WealthOS, a personal portfolio intelligence advisor.
+You have access to both the user's portfolio history AND real-time market news for relevant holdings.
+Always cite whether your answer is based on portfolio data ("from your snapshots") or current market news ("per recent news"). Never blur the two.
+Always cite specific dates and numbers from the context.
+Never make up data not present in the context.
+Be concise, specific, and actionable.
+Answer the user's question grounded in the portfolio context provided at the start of the conversation.`;
+}
+
+/**
  * Plain-text snapshot summary used by the Research Agent as the
  * "CURRENT PORTFOLIO" section of the merged context.
  *

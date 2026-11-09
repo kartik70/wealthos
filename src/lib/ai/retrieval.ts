@@ -19,7 +19,6 @@ export interface RetrieveOptions {
   topK?: number;
   chunkTypes?: ChunkType[];
   dateRange?: { from: string; to: string };
-  symbols?: string[];
   precomputedEmbedding?: number[];
 }
 
@@ -48,7 +47,7 @@ export async function retrieveRelevantContext(
 
   const apiKey = await resolveGeminiKey(userId);
   const questionEmbedding =
-    options?.precomputedEmbedding ?? (await generateEmbedding(question, apiKey));
+    options?.precomputedEmbedding ?? (await generateEmbedding(question, apiKey, "RETRIEVAL_QUERY"));
 
   // Fix 4: bump ivfflat probes for better recall on approximate vector search.
   // Failure is non-fatal — query still works with default probes.

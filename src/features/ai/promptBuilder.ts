@@ -4,6 +4,7 @@ import type {
   MutualFundHolding,
   MutualFundTotals,
   PortfolioSnapshot,
+  TaxSummary,
 } from "@/types/portfolio";
 
 export function buildMutualFundPromptSection(
@@ -34,6 +35,7 @@ interface AdvisoryPromptInput {
   concentration?: HoldingConcentration[];
   mfTotals?: MutualFundTotals;
   mfHoldings?: MutualFundHolding[];
+  taxSummary?: TaxSummary;
 }
 
 /**
@@ -115,6 +117,15 @@ export function buildPortfolioPrompt(input: AdvisoryPromptInput): string {
       equitySharePct: equityShare,
       mfSharePct: mfShare,
     },
+    taxSummary: input.taxSummary !== undefined ? {
+      estimatedSTCG: round(input.taxSummary.estimatedSTCG),
+      estimatedLTCG: round(input.taxSummary.estimatedLTCG),
+      harvestingOpportunities: input.taxSummary.harvestingOpportunities.map((h) => ({
+        symbol: h.symbol,
+        loss: round(h.loss),
+        saving: round(h.saving),
+      })),
+    } : null,
   };
 
   return `You are the portfolio advisory layer for WealthOS — a professional, paid-grade portfolio analyst writing a private briefing for a single retail investor (Indian market).
@@ -159,7 +170,7 @@ c) For each holding return: reasoning (1-2 sentences, specific to this stock and
 - portfolioStructure.psuVsPrivate: rough split commentary for equity book.
 - portfolioStructure.equityVsMFSplit: use combined.equitySharePct / mfSharePct numbers — call out if one side dominates >75%.
 - portfolioStructure.sectorOverlap: if equity stocks and MF holdings double up on the same sectors (e.g. banking/financials in both), say so.
-- taxSummary.estimatedSTCG and estimatedLTCG: leave as 0 unless you can derive them strictly from provided unrealisedGain values you would advise booking. ltcgThresholdWarning: true if total potential LTCG bookings exceed ₹1,00,000. harvestingOpportunities: short list of symbols carrying losses worth booking before FY end.
+- taxSummary.estimatedSTCG and estimatedLTCG: MIRROR the values from deterministic.taxSummary exactly (or 0 if null). These are worst-case STCG / best-case LTCG approximations since purchase dates are unavailable. ltcgThresholdWarning: true if deterministic.taxSummary.estimatedLTCG > 100000. harvestingOpportunities: MIRROR from deterministic.taxSummary.harvestingOpportunities (symbols only).
 - priorityActions: top 5 ranked actions across equity AND MF, ranked by rupee impact and urgency. Each entry MUST include rank (1-5), urgency (URGENT / THIS_WEEK / THIS_MONTH), action (specific, e.g. "Trim NTPC by 30% to bring allocation under 12%"), impact (HIGH/MEDIUM/LOW), and rupeesImpacted (a concrete number derived from currentValue or unrealisedGain; null only if not quantifiable).
 - alerts: short list of structural alerts.
 - summary: 2-3 sentence executive briefing.

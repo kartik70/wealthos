@@ -107,20 +107,26 @@ function detectDateRange(lowerQ: string): { from: string; to: string } | null {
     return { from: toIso(daysAgo(now, 7)), to: toIso(now) };
   }
 
-  // Specific month name (e.g., "May", "January") — interpret as that month
-  // of the current year, or the previous year if the month is in the future.
+  // Specific month name (e.g., "in May", "May 2026") — require temporal context
+  // so that "may" as a modal verb ("what may happen") does not trigger a date filter.
   for (const name of Object.keys(MONTH_NAMES)) {
-    const re = new RegExp(`\\b${name}\\b`, "i");
-    if (re.test(lowerQ)) {
-      const monthIdx = MONTH_NAMES[name];
-      let year = now.getFullYear();
-      if (monthIdx > now.getMonth()) {
-        year -= 1;
-      }
-      const from = new Date(year, monthIdx, 1, 0, 0, 0, 0);
-      const to = new Date(year, monthIdx + 1, 0, 23, 59, 59, 999);
-      return { from: toIso(from), to: toIso(to) };
+    // "may" as a modal verb is too ambiguous without surrounding temporal context.
+    // Require "in <month>", "<month> <year>", "since/before/after/during/from <month>".
+    const hasTemporalContext =
+      new RegExp(`\\bin\\s+${name}\\b`, "i").test(lowerQ) ||
+      new RegExp(`\\b${name}\\s+20\\d{2}\\b`, "i").test(lowerQ) ||
+      new RegExp(`\\b(since|before|after|during|from)\\s+${name}\\b`, "i").test(lowerQ);
+
+    if (!hasTemporalContext) continue;
+
+    const monthIdx = MONTH_NAMES[name];
+    let year = now.getFullYear();
+    if (monthIdx > now.getMonth()) {
+      year -= 1;
     }
+    const from = new Date(year, monthIdx, 1, 0, 0, 0, 0);
+    const to = new Date(year, monthIdx + 1, 0, 23, 59, 59, 999);
+    return { from: toIso(from), to: toIso(to) };
   }
 
   return null;

@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createSupabaseAdminClient } from "../db/supabase";
 import { calcLumpSumProjection, calcGoalProgress } from "../finance/goals";
 import { MissingApiKeyError, resolveGeminiKey } from "./keyResolver";
+import { GEMINI_EMBEDDING_MODEL } from "./models";
 import type { Holding, PortfolioSnapshot } from "../../types/portfolio";
 import type { GoalRow, MutualFundHoldingRow } from "../../types/db";
 import type { SnapshotDiff } from "../finance/diff";
@@ -47,18 +48,26 @@ class LRUCache<K, V> {
 
 const embeddingCache = new LRUCache<string, number[]>(100);
 
-export async function generateEmbedding(text: string, apiKey?: string): Promise<number[]> {
-  const cacheKey = text.toLowerCase().trim();
+export async function generateEmbedding(
+  text: string,
+  apiKey?: string,
+  taskType: "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY" = "RETRIEVAL_DOCUMENT",
+): Promise<number[]> {
+  const cacheKey = `${taskType}:${text.toLowerCase().trim()}`;
   const cached = embeddingCache.get(cacheKey);
   if (cached !== undefined) {
     return cached;
   }
-  const embedding = await generateEmbeddingFromAPI(text, apiKey);
+  const embedding = await generateEmbeddingFromAPI(text, apiKey, taskType);
   embeddingCache.set(cacheKey, embedding);
   return embedding;
 }
 
-async function generateEmbeddingFromAPI(text: string, apiKey?: string): Promise<number[]> {
+async function generateEmbeddingFromAPI(
+  text: string,
+  apiKey?: string,
+  taskType: "RETRIEVAL_DOCUMENT" | "RETRIEVAL_QUERY" = "RETRIEVAL_DOCUMENT",
+): Promise<number[]> {
   const resolvedApiKey = apiKey ?? process.env.GEMINI_API_KEY;
 
   if (resolvedApiKey === undefined || resolvedApiKey.trim() === "") {
@@ -71,10 +80,14 @@ async function generateEmbeddingFromAPI(text: string, apiKey?: string): Promise<
       : new GoogleGenerativeAI(resolvedApiKey);
 
   const model = client.getGenerativeModel({
-    model: "gemini-embedding-001",
+    model: GEMINI_EMBEDDING_MODEL,
   });
 
-  const result = await model.embedContent(text);
+  const result = await model.embedContent({
+    content: { parts: [{ text }], role: "user" },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    taskType: taskType as any,
+  });
   const fullEmbedding = result.embedding.values;
 
   // Truncate to 768 dimensions
