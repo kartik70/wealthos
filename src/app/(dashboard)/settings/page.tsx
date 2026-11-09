@@ -12,6 +12,7 @@ import { createSupabaseBrowserClient } from "@/lib/db/supabase";
 import {
   getStoredAIProvider,
   setStoredAIProvider,
+  providerLabel,
   type AIProvider,
 } from "@/lib/ai/provider";
 import type { PortfolioSnapshot } from "@/types/portfolio";
@@ -29,6 +30,8 @@ interface SnapshotListItem {
 interface ApiKeyStatus {
   anthropicLast4: string | null;
   geminiLast4: string | null;
+  openrouterLast4: string | null;
+  groqLast4: string | null;
   updatedAt: string | null;
 }
 
@@ -90,9 +93,13 @@ export default function SettingsPage() {
   const [deletingSnapshotId, setDeletingSnapshotId] = useState<string | null>(null);
   const [anthropicKey, setAnthropicKey] = useState("");
   const [geminiKey, setGeminiKey] = useState("");
+  const [openrouterKey, setOpenrouterKey] = useState("");
+  const [groqKey, setGroqKey] = useState("");
   const [apiKeyStatus, setApiKeyStatus] = useState<ApiKeyStatus>({
     anthropicLast4: null,
     geminiLast4: null,
+    openrouterLast4: null,
+    groqLast4: null,
     updatedAt: null,
   });
   const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(true);
@@ -166,7 +173,7 @@ export default function SettingsPage() {
   function handleProviderChange(nextProvider: AIProvider) {
     setProvider(nextProvider);
     setStoredAIProvider(nextProvider);
-    toast.success(`AI provider set to ${nextProvider === "anthropic" ? "Claude" : "Gemini"}`);
+    toast.success(`AI provider set to ${providerLabel(nextProvider)}`);
   }
 
   async function signOut() {
@@ -209,7 +216,12 @@ export default function SettingsPage() {
   }
 
   async function handleSaveApiKeys() {
-    if (anthropicKey.trim() === "" && geminiKey.trim() === "") {
+    if (
+      anthropicKey.trim() === "" &&
+      geminiKey.trim() === "" &&
+      openrouterKey.trim() === "" &&
+      groqKey.trim() === ""
+    ) {
       toast.error("Enter at least one API key to save");
       return;
     }
@@ -223,6 +235,8 @@ export default function SettingsPage() {
         body: JSON.stringify({
           anthropicKey,
           geminiKey,
+          openrouterKey,
+          groqKey,
         }),
       });
       const payload: unknown = await response.json();
@@ -241,6 +255,8 @@ export default function SettingsPage() {
       setApiKeyStatus(payload as ApiKeyStatus);
       setAnthropicKey("");
       setGeminiKey("");
+      setOpenrouterKey("");
+      setGroqKey("");
       toast.success("API keys saved");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to save API keys";
@@ -345,11 +361,13 @@ export default function SettingsPage() {
           Your preference is saved in this browser.
         </p>
 
-        <div className="mt-4 grid max-w-md grid-cols-2 gap-2">
+        <div className="mt-4 grid max-w-2xl grid-cols-2 gap-2 sm:grid-cols-4">
           {(
             [
-              { id: "anthropic" as const, label: "Claude" },
-              { id: "gemini" as const, label: "Gemini" },
+              { id: "anthropic" as const, label: "Claude", sub: "Anthropic" },
+              { id: "gemini" as const, label: "Gemini", sub: "Google" },
+              { id: "openrouter" as const, label: "OpenRouter", sub: "Free tier" },
+              { id: "groq" as const, label: "Groq", sub: "Free tier" },
             ] as const
           ).map((option) => {
             const active = provider === option.id;
@@ -365,7 +383,8 @@ export default function SettingsPage() {
                   color: active ? "#ffffff" : "#8899aa",
                 }}
               >
-                {option.label}
+                <div>{option.label}</div>
+                <div className="text-[11px] opacity-60">{option.sub}</div>
               </button>
             );
           })}
@@ -477,6 +496,96 @@ export default function SettingsPage() {
                 className="text-[#3b82f6] hover:underline"
               >
                 aistudio.google.com
+              </a>
+              .
+            </p>
+          </div>
+
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="openrouter-api-key">OpenRouter API Key</Label>
+              <KeyStatusIndicator
+                isLoading={isLoadingApiKeys}
+                hasKey={apiKeyStatus.openrouterLast4 !== null}
+              />
+            </div>
+            <p className="text-xs" style={{ color: "#8899aa" }}>
+              Free tier available. Routes to Gemini Flash, Llama, and many other models.
+            </p>
+            <Input
+              id="openrouter-api-key"
+              type="password"
+              value={openrouterKey}
+              placeholder={
+                apiKeyStatus.openrouterLast4 === null
+                  ? "sk-or-..."
+                  : `Saved ending in ${apiKeyStatus.openrouterLast4}`
+              }
+              autoComplete="off"
+              onChange={(event) => setOpenrouterKey(event.target.value)}
+              className="border-[#1e2d40] bg-[#0a0f1e] font-mono text-sm text-white placeholder:text-[#4a5568]"
+            />
+            <p className="text-xs" style={{ color: "#4a5568" }}>
+              {isLoadingApiKeys
+                ? "Checking saved key..."
+                : apiKeyStatus.openrouterLast4 === null
+                  ? "No OpenRouter key saved."
+                  : `Saved key ends in ${apiKeyStatus.openrouterLast4}.`}
+            </p>
+            <p className="text-xs" style={{ color: "#4a5568" }}>
+              Get your key at{" "}
+              <a
+                href="https://openrouter.ai/keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#3b82f6] hover:underline"
+              >
+                openrouter.ai/keys
+              </a>
+              .
+            </p>
+          </div>
+
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="groq-api-key">Groq API Key</Label>
+              <KeyStatusIndicator
+                isLoading={isLoadingApiKeys}
+                hasKey={apiKeyStatus.groqLast4 !== null}
+              />
+            </div>
+            <p className="text-xs" style={{ color: "#8899aa" }}>
+              Free tier available. Runs Llama 3.3 70B and Mixtral at very high speed.
+            </p>
+            <Input
+              id="groq-api-key"
+              type="password"
+              value={groqKey}
+              placeholder={
+                apiKeyStatus.groqLast4 === null
+                  ? "gsk_..."
+                  : `Saved ending in ${apiKeyStatus.groqLast4}`
+              }
+              autoComplete="off"
+              onChange={(event) => setGroqKey(event.target.value)}
+              className="border-[#1e2d40] bg-[#0a0f1e] font-mono text-sm text-white placeholder:text-[#4a5568]"
+            />
+            <p className="text-xs" style={{ color: "#4a5568" }}>
+              {isLoadingApiKeys
+                ? "Checking saved key..."
+                : apiKeyStatus.groqLast4 === null
+                  ? "No Groq key saved."
+                  : `Saved key ends in ${apiKeyStatus.groqLast4}.`}
+            </p>
+            <p className="text-xs" style={{ color: "#4a5568" }}>
+              Get your key at{" "}
+              <a
+                href="https://console.groq.com/keys"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#3b82f6] hover:underline"
+              >
+                console.groq.com/keys
               </a>
               .
             </p>

@@ -1,8 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { TextBlock } from "@anthropic-ai/sdk/resources/messages";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 
 import { MissingApiKeyError } from "./keyResolver";
+import { ANTHROPIC_MODEL, GEMINI_FLASH_MODEL, GROQ_MODEL, OPENROUTER_MODEL } from "./models";
 import type {
   Alert,
   AssetAllocationEntry,
@@ -71,11 +73,7 @@ function getDefaultAIProvider(): AIProvider {
     return "anthropic";
   }
 
-  if (!isAIProvider(configured)) {
-    throw new Error('Invalid AI_PROVIDER. Expected "anthropic" or "gemini"');
-  }
-
-  return configured;
+  return isAIProvider(configured) ? configured : "anthropic";
 }
 
 async function generateText(
@@ -87,7 +85,9 @@ async function generateText(
   if (provider === "gemini") {
     return generateWithGemini(prompt, maxTokens, apiKey);
   }
-
+  if (provider === "openrouter" || provider === "groq") {
+    return generateWithOpenAICompat(prompt, maxTokens, provider, apiKey);
+  }
   return generateWithAnthropic(prompt, maxTokens, apiKey);
 }
 
@@ -108,7 +108,7 @@ async function generateWithAnthropic(
       : new Anthropic({ apiKey: resolvedApiKey });
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: ANTHROPIC_MODEL,
     max_tokens: maxTokens,
     messages: [{ role: "user", content: prompt }],
   });
@@ -142,7 +142,7 @@ async function generateWithGemini(
       ? (geminiClient ??= new GoogleGenerativeAI(resolvedApiKey))
       : new GoogleGenerativeAI(resolvedApiKey);
 
-  const model = client.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = client.getGenerativeModel({ model: GEMINI_FLASH_MODEL });
   const response = await model.generateContent({
     contents: [{ role: "user", parts: [{ text: prompt }] }],
     generationConfig: {
@@ -159,6 +159,40 @@ async function generateWithGemini(
   return text;
 }
 
+async function generateWithOpenAICompat(
+  prompt: string,
+  maxTokens: number,
+  provider: "openrouter" | "groq",
+  apiKey?: string,
+): Promise<string> {
+  const envKey = provider === "openrouter" ? process.env.OPENROUTER_API_KEY : process.env.GROQ_API_KEY;
+  const resolvedApiKey = apiKey ?? envKey;
+
+  if (resolvedApiKey === undefined || resolvedApiKey.trim() === "") {
+    throw new MissingApiKeyError(provider);
+  }
+
+  const baseURL =
+    provider === "openrouter"
+      ? "https://openrouter.ai/api/v1"
+      : "https://api.groq.com/openai/v1";
+
+  const model = provider === "openrouter" ? OPENROUTER_MODEL : GROQ_MODEL;
+
+  const client = new OpenAI({ apiKey: resolvedApiKey, baseURL });
+  const response = await client.chat.completions.create({
+    model,
+    max_tokens: maxTokens,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = response.choices[0]?.message?.content?.trim() ?? "";
+  if (text === "") {
+    throw new Error(`${provider} returned an empty response`);
+  }
+  return text;
+}
+
 export interface AdvisorChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -168,6 +202,7 @@ export async function streamAdvisorResponse({
   provider,
   apiKey,
   systemPrompt,
+  contextMessage,
   conversationHistory,
   userMessage,
   onDelta,
@@ -175,6 +210,10 @@ export async function streamAdvisorResponse({
   provider: AIProvider;
   apiKey?: string;
   systemPrompt: string;
+  /** Dynamic per-request portfolio context. When provided it is injected as a
+   *  user message before the conversation history, keeping the system prompt
+   *  static so the Anthropic prompt cache is effective. */
+  contextMessage?: string;
   conversationHistory: AdvisorChatMessage[];
   userMessage: string;
   onDelta: (text: string) => void;
@@ -183,6 +222,19 @@ export async function streamAdvisorResponse({
     return streamAdvisorGemini({
       apiKey,
       systemPrompt,
+      contextMessage,
+      conversationHistory,
+      userMessage,
+      onDelta,
+    });
+  }
+
+  if (provider === "openrouter" || provider === "groq") {
+    return streamAdvisorOpenAICompat({
+      provider,
+      apiKey,
+      systemPrompt,
+      contextMessage,
       conversationHistory,
       userMessage,
       onDelta,
@@ -192,6 +244,7 @@ export async function streamAdvisorResponse({
   return streamAdvisorAnthropic({
     apiKey,
     systemPrompt,
+    contextMessage,
     conversationHistory,
     userMessage,
     onDelta,
@@ -224,12 +277,14 @@ async function compressHistory(
 async function streamAdvisorAnthropic({
   apiKey,
   systemPrompt,
+  contextMessage,
   conversationHistory,
   userMessage,
   onDelta,
 }: {
   apiKey?: string;
   systemPrompt: string;
+  contextMessage?: string;
   conversationHistory: AdvisorChatMessage[];
   userMessage: string;
   onDelta: (text: string) => void;
@@ -250,7 +305,18 @@ async function streamAdvisorAnthropic({
     ),
   );
 
+  // Prepend the dynamic portfolio context as a user/assistant message pair so
+  // the system prompt remains static and the Anthropic prompt cache is effective.
+  const contextPreamble: Anthropic.MessageParam[] =
+    contextMessage !== undefined
+      ? [
+          { role: "user", content: `Portfolio context:\n\n${contextMessage}` },
+          { role: "assistant", content: "I have your portfolio context. How can I help?" },
+        ]
+      : [];
+
   const messages: Anthropic.MessageParam[] = [
+    ...contextPreamble,
     ...compressedHistory.map((message) => ({
       role: message.role,
       content: message.content,
@@ -259,7 +325,7 @@ async function streamAdvisorAnthropic({
   ];
 
   const stream = client.messages.stream({
-    model: "claude-sonnet-4-20250514",
+    model: ANTHROPIC_MODEL,
     max_tokens: 800,
     // cache_control caches the system prompt prefix — effective when portfolio context is stable
     system: [{ type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } }],
@@ -284,12 +350,14 @@ async function streamAdvisorAnthropic({
 async function streamAdvisorGemini({
   apiKey,
   systemPrompt,
+  contextMessage,
   conversationHistory,
   userMessage,
   onDelta,
 }: {
   apiKey?: string;
   systemPrompt: string;
+  contextMessage?: string;
   conversationHistory: AdvisorChatMessage[];
   userMessage: string;
   onDelta: (text: string) => void;
@@ -302,14 +370,25 @@ async function streamAdvisorGemini({
 
   const gemini = new GoogleGenerativeAI(resolvedApiKey);
   const model = gemini.getGenerativeModel({
-    model: "gemini-2.0-flash",
+    model: GEMINI_FLASH_MODEL,
     systemInstruction: systemPrompt,
   });
 
-  const history = conversationHistory.map((message) => ({
-    role: message.role === "assistant" ? "model" : "user",
-    parts: [{ text: message.content }],
-  }));
+  const contextPreamble =
+    contextMessage !== undefined
+      ? [
+          { role: "user", parts: [{ text: `Portfolio context:\n\n${contextMessage}` }] },
+          { role: "model", parts: [{ text: "I have your portfolio context. How can I help?" }] },
+        ]
+      : [];
+
+  const history = [
+    ...contextPreamble,
+    ...conversationHistory.map((message) => ({
+      role: message.role === "assistant" ? "model" : "user",
+      parts: [{ text: message.content }],
+    })),
+  ];
 
   const chat = model.startChat({ history });
   const result = await chat.sendMessageStream(userMessage);
@@ -320,6 +399,73 @@ async function streamAdvisorGemini({
     if (text) {
       fullText += text;
       onDelta(text);
+    }
+  }
+
+  return fullText;
+}
+
+async function streamAdvisorOpenAICompat({
+  provider,
+  apiKey,
+  systemPrompt,
+  contextMessage,
+  conversationHistory,
+  userMessage,
+  onDelta,
+}: {
+  provider: "openrouter" | "groq";
+  apiKey?: string;
+  systemPrompt: string;
+  contextMessage?: string;
+  conversationHistory: AdvisorChatMessage[];
+  userMessage: string;
+  onDelta: (text: string) => void;
+}): Promise<string> {
+  const envKey = provider === "openrouter" ? process.env.OPENROUTER_API_KEY : process.env.GROQ_API_KEY;
+  const resolvedApiKey = apiKey ?? envKey;
+
+  if (resolvedApiKey === undefined || resolvedApiKey.trim() === "") {
+    throw new MissingApiKeyError(provider);
+  }
+
+  const baseURL =
+    provider === "openrouter"
+      ? "https://openrouter.ai/api/v1"
+      : "https://api.groq.com/openai/v1";
+
+  const model = provider === "openrouter" ? OPENROUTER_MODEL : GROQ_MODEL;
+
+  const client = new OpenAI({ apiKey: resolvedApiKey, baseURL });
+
+  const contextPreamble: OpenAI.Chat.ChatCompletionMessageParam[] =
+    contextMessage !== undefined
+      ? [
+          { role: "user", content: `Portfolio context:\n\n${contextMessage}` },
+          { role: "assistant", content: "I have your portfolio context. How can I help?" },
+        ]
+      : [];
+
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    { role: "system", content: systemPrompt },
+    ...contextPreamble,
+    ...conversationHistory.map((m) => ({ role: m.role, content: m.content }) as OpenAI.Chat.ChatCompletionMessageParam),
+    { role: "user", content: userMessage },
+  ];
+
+  const stream = await client.chat.completions.create({
+    model,
+    max_tokens: 800,
+    messages,
+    stream: true,
+  });
+
+  let fullText = "";
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) {
+      fullText += delta;
+      onDelta(delta);
     }
   }
 

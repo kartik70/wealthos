@@ -3,6 +3,13 @@ import type { AIProvider } from "./provider";
 
 export type MissingKeyProvider = AIProvider;
 
+const ENV_KEY_MAP: Record<AIProvider, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  gemini: "GEMINI_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
+  groq: "GROQ_API_KEY",
+};
+
 export class MissingApiKeyError extends Error {
   readonly missingKey: MissingKeyProvider;
 
@@ -22,10 +29,7 @@ async function resolveKey(
     return stored;
   }
 
-  const envKey =
-    provider === "anthropic"
-      ? process.env.ANTHROPIC_API_KEY
-      : process.env.GEMINI_API_KEY;
+  const envKey = process.env[ENV_KEY_MAP[provider]];
 
   if (envKey !== undefined && envKey.trim() !== "") {
     return envKey;

@@ -1,11 +1,25 @@
-export type AIProvider = "anthropic" | "gemini";
+export type AIProvider = "anthropic" | "gemini" | "openrouter" | "groq";
 
 export const AI_PROVIDER_STORAGE_KEY = "ai_provider";
 export const AI_PROVIDER_HEADER = "x-ai-provider";
 const LEGACY_AI_PROVIDER_STORAGE_KEY = "wealthos:ai-provider";
 
 export function isAIProvider(value: unknown): value is AIProvider {
-  return value === "anthropic" || value === "gemini";
+  return (
+    value === "anthropic" ||
+    value === "gemini" ||
+    value === "openrouter" ||
+    value === "groq"
+  );
+}
+
+export function providerLabel(provider: AIProvider): string {
+  switch (provider) {
+    case "anthropic": return "Claude";
+    case "gemini": return "Gemini";
+    case "openrouter": return "OpenRouter";
+    case "groq": return "Groq";
+  }
 }
 
 export function getStoredAIProvider(): AIProvider | null {

@@ -6,6 +6,8 @@ export const runtime = "nodejs";
 interface SaveApiKeysBody {
   anthropicKey?: string;
   geminiKey?: string;
+  openrouterKey?: string;
+  groqKey?: string;
 }
 
 export async function GET(): Promise<Response> {
@@ -37,7 +39,12 @@ export async function PUT(request: Request): Promise<Response> {
       return Response.json({ error: "Invalid API key payload" }, { status: 400 });
     }
 
-    const status = await saveUserApiKeys(auth.data.userId, body);
+    const status = await saveUserApiKeys(auth.data.userId, {
+      anthropicKey: body.anthropicKey,
+      geminiKey: body.geminiKey,
+      openrouterKey: body.openrouterKey,
+      groqKey: body.groqKey,
+    });
     return Response.json(status);
   } catch (error) {
     return Response.json(
@@ -63,6 +70,8 @@ function isSaveApiKeysBody(value: unknown): value is SaveApiKeysBody {
   const candidate = value as Partial<SaveApiKeysBody>;
   return (
     (candidate.anthropicKey === undefined || typeof candidate.anthropicKey === "string") &&
-    (candidate.geminiKey === undefined || typeof candidate.geminiKey === "string")
+    (candidate.geminiKey === undefined || typeof candidate.geminiKey === "string") &&
+    (candidate.openrouterKey === undefined || typeof candidate.openrouterKey === "string") &&
+    (candidate.groqKey === undefined || typeof candidate.groqKey === "string")
   );
 }

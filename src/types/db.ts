@@ -110,6 +110,8 @@ export type UserApiKeyRow = {
   user_id: string;
   anthropic_key: string | null;
   gemini_key: string | null;
+  openrouter_key: string | null;
+  groq_key: string | null;
   updated_at: string | null;
 };
 
