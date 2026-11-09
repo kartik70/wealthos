@@ -399,6 +399,11 @@ export default function SettingsPage() {
             <p className="mt-2 text-sm" style={{ color: "#8899aa" }}>
               Keys are encrypted before storage. Saved keys are shown by last four characters only.
             </p>
+            <p className="mt-1 text-sm" style={{ color: "#8899aa" }}>
+              <span className="font-medium text-white">Minimum setup:</span> a Gemini key is always
+              required (it powers portfolio search). Add one more key for your selected AI provider —
+              or just use Gemini for both.
+            </p>
           </div>
 
           <Button
@@ -417,10 +422,13 @@ export default function SettingsPage() {
               <KeyStatusIndicator
                 isLoading={isLoadingApiKeys}
                 hasKey={apiKeyStatus.anthropicLast4 !== null}
+                required={provider === "anthropic"}
               />
             </div>
             <p className="text-xs" style={{ color: "#8899aa" }}>
-              Required for Claude chat and insights.
+              {provider === "anthropic"
+                ? "Required — Claude is your selected provider."
+                : "Only needed if you select Claude as your provider."}
             </p>
             <Input
               id="anthropic-api-key"
@@ -458,14 +466,21 @@ export default function SettingsPage() {
 
           <div className="grid gap-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="gemini-api-key">Gemini API Key</Label>
+              <Label htmlFor="gemini-api-key">
+                Gemini API Key{" "}
+                <span className="text-[10px] font-normal" style={{ color: "#3b82f6" }}>
+                  always required
+                </span>
+              </Label>
               <KeyStatusIndicator
                 isLoading={isLoadingApiKeys}
                 hasKey={apiKeyStatus.geminiLast4 !== null}
+                required={true}
               />
             </div>
             <p className="text-xs" style={{ color: "#8899aa" }}>
-              Required for embeddings (advisor chat history) and Gemini chat if selected.
+              Powers advisor memory and portfolio search (embeddings). Free tier — no billing
+              required.{provider === "gemini" ? " Also your selected LLM provider." : ""}
             </p>
             <Input
               id="gemini-api-key"
@@ -507,10 +522,14 @@ export default function SettingsPage() {
               <KeyStatusIndicator
                 isLoading={isLoadingApiKeys}
                 hasKey={apiKeyStatus.openrouterLast4 !== null}
+                required={provider === "openrouter"}
               />
             </div>
             <p className="text-xs" style={{ color: "#8899aa" }}>
-              Free tier available. Routes to Gemini Flash, Llama, and many other models.
+              {provider === "openrouter"
+                ? "Required — OpenRouter is your selected provider."
+                : "Only needed if you select OpenRouter as your provider."}{" "}
+              Free tier available; routes to 100+ models.
             </p>
             <Input
               id="openrouter-api-key"
@@ -552,10 +571,14 @@ export default function SettingsPage() {
               <KeyStatusIndicator
                 isLoading={isLoadingApiKeys}
                 hasKey={apiKeyStatus.groqLast4 !== null}
+                required={provider === "groq"}
               />
             </div>
             <p className="text-xs" style={{ color: "#8899aa" }}>
-              Free tier available. Runs Llama 3.3 70B and Mixtral at very high speed.
+              {provider === "groq"
+                ? "Required — Groq is your selected provider."
+                : "Only needed if you select Groq as your provider."}{" "}
+              Free tier available; runs Llama 3.3 70B at very high speed.
             </p>
             <Input
               id="groq-api-key"
@@ -713,9 +736,11 @@ function SectionHeader({ label }: { label: string }) {
 function KeyStatusIndicator({
   isLoading,
   hasKey,
+  required,
 }: {
   isLoading: boolean;
   hasKey: boolean;
+  required: boolean;
 }) {
   if (isLoading) {
     return null;
@@ -728,10 +753,17 @@ function KeyStatusIndicator({
       </span>
     );
   }
+  if (required) {
+    return (
+      <span className="flex items-center gap-1 text-[11px] font-medium text-rose-500">
+        <AlertTriangle className="size-3.5" aria-hidden="true" />
+        Required
+      </span>
+    );
+  }
   return (
-    <span className="flex items-center gap-1 text-[11px] font-medium text-rose-500">
-      <AlertTriangle className="size-3.5" aria-hidden="true" />
-      Missing
+    <span className="text-[11px]" style={{ color: "#4a5568" }}>
+      Optional
     </span>
   );
 }
